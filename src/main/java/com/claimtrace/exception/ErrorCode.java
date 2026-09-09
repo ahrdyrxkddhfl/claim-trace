@@ -45,6 +45,27 @@ public enum ErrorCode {
     CLAIM_ALREADY_DECIDED(
             "확정된 청구는 변경할 수 없습니다", "INV-7", HttpStatus.CONFLICT),
 
+    /**
+     * INV-4 · 판정을 수행한 심사자가 자기 건을 승인하려 한 경우.
+     *
+     * <p>INV-4 는 정책 조건에 해당하는 건이 <b>단독으로</b> 확정될 수 없다고
+     * 규정한다. 본인이 판정하고 본인이 승인하면 절차상 두 단계를 거쳤어도
+     * 실질은 단독 확정이므로, 같은 불변조건의 위반으로 본다.
+     * 보조수단성 점검항목 ④의 직무 분리에 대응한다.
+     */
+    SELF_APPROVAL_FORBIDDEN(
+            "본인이 판정한 건은 승인할 수 없습니다", "INV-4", HttpStatus.FORBIDDEN),
+
+    /**
+     * INV-4 · 정책이 지정한 승인 권한이 없는 사용자가 승인하려 한 경우.
+     *
+     * <p>승인 가능 역할은 정책의 {@code approverRoles} 에 데이터로 들어 있다.
+     * 코드에 역할을 고정하지 않는 이유는 발동 조건을 데이터로 둔 것과
+     * 같다(D-5). 어떤 통제를 누가 풀 수 있는지도 심사관리자가 정한다.
+     */
+    APPROVER_ROLE_REQUIRED(
+            "이 개입을 승인할 권한이 없습니다", "INV-4", HttpStatus.FORBIDDEN),
+
     /** E-9 · INV-10 · 미판정 항목이 남은 상태로 확정하려 한 경우. */
     PENDING_ITEMS_EXIST(
             "판정되지 않은 항목이 있어 확정할 수 없습니다", "INV-10", HttpStatus.BAD_REQUEST),

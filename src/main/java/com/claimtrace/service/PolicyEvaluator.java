@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import com.claimtrace.domain.InterventionPolicy;
 import com.claimtrace.domain.enums.CoverageType;
+import com.claimtrace.domain.enums.UserRole;
 import com.claimtrace.exception.PolicyDefinitionException;
 
 import tools.jackson.core.type.TypeReference;
@@ -235,6 +236,28 @@ public class PolicyEvaluator {
                     policy.getCode(), FIELD_COVERAGE_TYPE + " 에는 eq 만 사용할 수 있습니다: " + op);
         }
         return actual != null && actual.name().equals(String.valueOf(value));
+    }
+
+    /**
+     * 주어진 역할이 이 정책의 개입을 승인할 수 있는지 판별한다.
+     *
+     * <p>승인 가능 역할도 발동 조건과 마찬가지로 정책에 데이터로 들어 있다.
+     * 코드에 {@code REVIEW_MANAGER} 를 고정하면, 어떤 통제를 누가 풀 수
+     * 있는지가 다시 코드에 묻힌다. 조건을 데이터로 둔 이유(D-5)가 승인
+     * 권한에도 그대로 적용된다.
+     *
+     * @param policy 개입을 요구한 정책
+     * @param role 승인을 시도하는 사용자의 역할
+     * @return 승인할 수 있으면 {@code true}
+     * @throws PolicyDefinitionException 승인 역할 목록이 비어 있는 경우
+     */
+    public boolean canApprove(InterventionPolicy policy, UserRole role) {
+        List<String> roles = jsonMapper.readValue(
+                policy.getApproverRoles(), new TypeReference<List<String>>() { });
+        if (roles.isEmpty()) {
+            throw new PolicyDefinitionException(policy.getCode(), "승인 가능 역할이 비어 있습니다");
+        }
+        return role != null && roles.contains(role.name());
     }
 
     /**

@@ -34,6 +34,25 @@ public interface InterventionRepository extends JpaRepository<Intervention, Long
     List<Intervention> findAllByClaimId(@Param("claimId") Long claimId);
 
     /**
+     * 특정 정책에 의한 개입이 이 청구에 이미 기록되어 있는지 확인한다.
+     *
+     * <p>판정을 저장할 때마다 정책을 평가하므로, 같은 청구의 여러 항목을
+     * 차례로 판정하면 같은 정책이 반복해서 발동한다. 승인 대기 레코드가
+     * 항목 수만큼 쌓이면 심사관리자가 같은 건을 여러 번 승인해야 하고,
+     * INV-4 검사에서도 하나만 승인되고 나머지가 대기로 남아 확정이 막힌다.
+     *
+     * @param claimId 청구 식별자
+     * @param policyId 개입 정책 식별자
+     * @return 이미 기록되어 있으면 {@code true}
+     */
+    @Query("""
+            SELECT COUNT(n) > 0 FROM Intervention n
+            WHERE n.claim.id = :claimId AND n.interventionPolicy.id = :policyId
+            """)
+    boolean existsByClaimIdAndPolicyId(@Param("claimId") Long claimId,
+                                       @Param("policyId") Long policyId);
+
+    /**
      * 청구에서 특정 유형의 개입이 몇 건 발생했는지 센다.
      *
      * <p>확정 응답의 {@code overrideCount} 에 쓴다. 이 청구에서 AI 권고가
