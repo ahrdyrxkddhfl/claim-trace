@@ -1,0 +1,57 @@
+# =============================================================
+# CLAIM-TRACE 애플리케이션 설정
+#
+# H2 인메모리를 쓴다. 애플리케이션을 내리면 데이터가 사라지고
+# 기동할 때마다 data.sql 로 시드가 다시 적재된다.
+# 심사 데이터를 영속시키는 것이 목적이 아니라
+# 불변조건이 동작하는지 보이는 것이 목적이므로 이 구성으로 충분하다.
+# =============================================================
+
+spring:
+  application:
+    name: claim-trace
+
+  datasource:
+    # MODE=PostgreSQL — DBML 원본이 PostgreSQL 기준이라 방언 차이를 줄인다.
+    # 다만 부분 UNIQUE 인덱스(WHERE 절)는 이 모드에서도 지원되지 않는다.
+    # INV-12 는 애플리케이션 레벨과 테스트로 보장한다.
+    url: jdbc:h2:mem:claimtrace;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      # 엔티티 정의로 스키마를 생성한다. DDL 원본은 DBML 이지만
+      # 구현 단계에서는 엔티티를 단일 소스로 둔다.
+      ddl-auto: create
+    defer-datasource-initialization: true   # 스키마 생성 후 data.sql 이 실행되도록
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false                      # 지연 로딩이 컨트롤러까지 새는 것을 막는다
+
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api      # OAS 의 servers.url 이 http://localhost:8080/api 이다
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+logging:
+  level:
+    org.hibernate.SQL: debug
