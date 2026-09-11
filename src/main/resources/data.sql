@@ -199,6 +199,15 @@ INSERT INTO reviews (id, claim_item_id, reviewer_id, decision, paid_amount, reas
 (1, 5, 1, 'PAY', 30400, '급여 진찰료로 담보 한도 내이며 부정 근거가 확인되지 않는다. 자기부담률 20퍼센트를 적용해 산정했다.', TRUE, NULL, '2026-09-02 14:15:00');
 
 
+-- 국소 설명서 신청.
+-- 제공 기한 산정은 청구인의 신청 API 책임이고(INV-8, 기술서 5.5) 그 API 는
+-- 고객 포털에 속해 구현 범위 밖이다. 초안 생성 엔드포인트는 이미 접수된
+-- 설명서의 본문을 채우는 역할이므로, 신청이 완료된 상태를 시드로 만들어 둔다.
+-- 기한은 신청일로부터 5영업일이다 (기술서 3.4 국소 설명 예시).
+INSERT INTO explanations (id, claim_id, type, status, model_name, body, file_url, drafted_by, requested_at, due_date, provided_at) VALUES
+(1, 1, 'LOCAL', 'REQUESTED', NULL, NULL, NULL, NULL, '2026-09-08 21:12:00', '2026-09-15', NULL);
+
+
 -- =============================================================
 -- IDENTITY 카운터 재시작
 --

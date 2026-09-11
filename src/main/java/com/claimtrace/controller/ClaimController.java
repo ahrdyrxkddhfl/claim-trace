@@ -1,5 +1,6 @@
 package com.claimtrace.controller;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -9,7 +10,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.claimtrace.domain.User;
 import com.claimtrace.dto.DecisionResult;
+import com.claimtrace.dto.ExplanationResponse;
 import com.claimtrace.service.ClaimDecisionService;
+import com.claimtrace.service.ExplanationService;
 import com.claimtrace.support.ActorResolver;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,16 +34,21 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class ClaimController {
 
     private final ClaimDecisionService claimDecisionService;
+    private final ExplanationService explanationService;
     private final ActorResolver actorResolver;
 
     /**
      * 의존성을 주입받는다.
      *
      * @param claimDecisionService 판정 확정 서비스
+     * @param explanationService 설명문 초안 생성 서비스
      * @param actorResolver 행위자 결정
      */
-    public ClaimController(ClaimDecisionService claimDecisionService, ActorResolver actorResolver) {
+    public ClaimController(ClaimDecisionService claimDecisionService,
+                           ExplanationService explanationService,
+                           ActorResolver actorResolver) {
         this.claimDecisionService = claimDecisionService;
+        this.explanationService = explanationService;
         this.actorResolver = actorResolver;
     }
 
@@ -74,5 +82,40 @@ public class ClaimController {
 
         User actor = actorResolver.resolve(actorId);
         return ResponseEntity.ok(claimDecisionService.decide(claimId, actor));
+    }
+
+    /**
+     * 고객 설명문 초안을 생성한다.
+     *
+     * <p>이미 접수된 국소 설명서의 본문을 채운다. 설명서 신청은 고객 포털의
+     * 책임이며 구현 범위 밖이므로, 접수된 설명서가 없으면 404 를 반환한다.
+     *
+     * @param claimId 대상 청구 식별자
+     * @param actorId 행위자 식별자. 인증을 대신하는 헤더다
+     * @return 201 과 본문이 채워진 설명서
+     */
+    @PostMapping("/{claimId}/explanations/draft")
+    @Operation(
+            summary = "고객 설명문 초안 생성 (단일 진입점)",
+            description = """
+                    disclosureLevel = CUSTOMER 인 채택 근거만으로 초안을 생성한다 (INV-9).
+
+                    검증: INV-5 부지급·일부지급 항목의 고객용 부정 근거 · INV-6 배정 확인
+
+                    초안은 심사자가 검토·확정해야 고객에게 발급된다. 완전 자동 발급 경로는 없다.
+                    """)
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "초안 생성 완료"),
+            @ApiResponse(responseCode = "400", description = "고객용 부정 근거 부재 (E-3) · 미판정 항목 존재"),
+            @ApiResponse(responseCode = "403", description = "타 심사자 배정 건 (E-5)"),
+            @ApiResponse(responseCode = "404", description = "대상 청구 없음 · 접수된 설명서 없음")
+    })
+    public ResponseEntity<ExplanationResponse> draftExplanation(
+            @PathVariable Long claimId,
+            @RequestHeader("X-Actor-Id") Long actorId) {
+
+        User actor = actorResolver.resolve(actorId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(explanationService.draft(claimId, actor));
     }
 }
