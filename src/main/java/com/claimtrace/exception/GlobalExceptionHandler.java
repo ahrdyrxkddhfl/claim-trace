@@ -120,13 +120,20 @@ public class GlobalExceptionHandler {
      * <p>이미 확정된 청구를 다시 확정하려는 경우가 대표적이다. 상태 충돌이므로
      * 409 로 응답한다.
      *
+     * <p>특정 불변조건 코드로 단정하지 않고 일반적인 상태 전이 오류로
+     * 응답한다. 이 처리기는 어떤 엔티티가 왜 막았는지 알지 못하므로,
+     * 예컨대 모든 {@link IllegalStateException} 을 "확정된 청구는 변경할 수
+     * 없습니다"로 바꾸면 청구와 무관한 예외까지 그 문구와 그 불변조건
+     * 번호를 달고 나간다. 응답의 {@code invariant} 필드는 그렇게 붙이면
+     * 신뢰할 수 없는 값이 된다.
+     *
      * @param ex 발생한 예외
      * @return 409 와 엔티티가 남긴 메시지
      */
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException ex) {
-        return ResponseEntity.status(ErrorCode.CLAIM_ALREADY_DECIDED.getStatus())
+        return ResponseEntity.status(ErrorCode.INVALID_STATE_TRANSITION.getStatus())
                 .body(ErrorResponse.of(
-                        ErrorCode.CLAIM_ALREADY_DECIDED, Map.of("detail", ex.getMessage())));
+                        ErrorCode.INVALID_STATE_TRANSITION, Map.of("detail", ex.getMessage())));
     }
 }

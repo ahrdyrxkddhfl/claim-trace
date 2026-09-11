@@ -25,6 +25,9 @@ import com.claimtrace.domain.enums.OverrideReasonType;
  * @param actorId 행위자 식별자
  * @param actorName 행위자 성명
  * @param approved 승인 여부. 승인 절차가 없는 유형이면 {@code null}
+ * @param approvedBy 승인·반려를 수행한 사용자 성명. 처리 전이면 {@code null}
+ * @param approvedAt 승인·반려 시각. 처리 전이면 {@code null}
+ * @param approvalNote 승인·반려 사유. 없으면 {@code null}
  * @param policyCode 발동 정책 코드. 정책 발동이 아니면 {@code null}
  * @param recommendation 뒤집힌 AI 권고. 오버라이드가 아니면 {@code null}
  * @param occurredAt 발생 시각
@@ -39,6 +42,9 @@ public record InterventionResponse(
         Long actorId,
         String actorName,
         Boolean approved,
+        String approvedBy,
+        LocalDateTime approvedAt,
+        String approvalNote,
         String policyCode,
         RecommendationSnapshot recommendation,
         LocalDateTime occurredAt) {
@@ -81,6 +87,9 @@ public record InterventionResponse(
                 intervention.getActor().getId(),
                 intervention.getActor().getName(),
                 intervention.getApproved(),
+                intervention.getApprovedBy() == null ? null : intervention.getApprovedBy().getName(),
+                intervention.getApprovedAt(),
+                intervention.getApprovalNote(),
                 intervention.getInterventionPolicy() == null
                         ? null : intervention.getInterventionPolicy().getCode(),
                 snapshot,

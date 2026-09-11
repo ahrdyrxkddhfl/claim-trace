@@ -88,8 +88,8 @@ public class ClaimDecisionService {
         Claim claim = claimRepository.findById(claimId)
                 .orElseThrow(() -> new ResourceNotFoundException("claim", claimId));
 
-        // 이미 확정된 청구를 다시 확정할 수 없다.
-        if (claim.isDecided()) {
+        // 이미 확정·종결된 청구를 다시 확정할 수 없다.
+        if (claim.isLocked()) {
             throw new InvariantViolationException(
                     ErrorCode.CLAIM_ALREADY_DECIDED,
                     Map.of("claimNo", claim.getClaimNo(), "decidedAt", String.valueOf(claim.getDecidedAt())));

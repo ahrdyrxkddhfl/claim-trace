@@ -172,11 +172,12 @@ public class Claim {
      * 자기 자신만으로 판단 가능한 조건, 즉 이미 확정되었는지만 막는다.
      *
      * @param at 확정 시각
-     * @throws IllegalStateException 이미 확정된 청구인 경우
+     * @throws IllegalStateException 이미 확정되었거나 종결된 청구인 경우
      */
     public void decide(LocalDateTime at) {
-        if (this.status == ClaimStatus.DECIDED) {
-            throw new IllegalStateException("이미 확정된 청구입니다. claimNo=" + this.claimNo);
+        if (isLocked()) {
+            throw new IllegalStateException(
+                    "이미 확정·종결된 청구입니다. claimNo=" + this.claimNo + ", status=" + this.status);
         }
         this.status = ClaimStatus.DECIDED;
         this.decidedAt = at;
@@ -185,13 +186,33 @@ public class Claim {
     /**
      * 확정된 청구인지 판별한다.
      *
-     * <p>INV-7 검사에 쓴다. 근거 상태 변경과 근거 추가, 판정 저장이 모두
-     * 이 값을 확인하고, 참이면 409 를 반환한다.
-     *
      * @return 상태가 {@link ClaimStatus#DECIDED} 이면 {@code true}
      */
     public boolean isDecided() {
         return this.status == ClaimStatus.DECIDED;
+    }
+
+    /**
+     * 판정과 근거가 잠긴 청구인지 판별한다.
+     *
+     * <p>INV-7 검사에 쓴다. 근거 상태 변경과 판정 저장이 이 값을 확인하고,
+     * 참이면 409 를 반환한다.
+     *
+     * <p>{@link ClaimStatus#DECIDED} 뿐 아니라 {@link ClaimStatus#CLOSED} 도
+     * 포함한다. 종결은 확정 이후의 상태이므로, 확정된 청구를 잠그면서
+     * 종결된 청구를 열어두면 지급까지 끝난 건을 되돌릴 수 있게 된다.
+     * INV-7 의 문언은 "확정된 청구"지만 그 취지는 판정이 끝난 뒤의 변경을
+     * 막는 것이고, 종결은 그 이후다.
+     *
+     * <p>{@link ClaimStatus#OBJECTION} 은 포함하지 않는다. 이의제기 재검토
+     * 중에 근거를 다시 검토해야 하는지는 설계가 규정하지 않은 공백이라,
+     * API 명세의 문언대로 확정과 종결만 막는다. 이 공백은 기술서 7.5 에
+     * 남긴다.
+     *
+     * @return 상태가 확정 또는 종결이면 {@code true}
+     */
+    public boolean isLocked() {
+        return this.status == ClaimStatus.DECIDED || this.status == ClaimStatus.CLOSED;
     }
 
     /**

@@ -43,6 +43,14 @@ import lombok.NoArgsConstructor;
  *
  * <p>{@code approved} 는 승인 절차가 있는 유형에만 의미가 있다. 오버라이드는
  * 승인 대상이 아니라 이미 일어난 사실의 기록이므로 {@code null} 로 남는다.
+ *
+ * <p><b>승인 기록 세 컬럼은 설계 이후에 추가한 것이다.</b> 최초 DBML 에는
+ * {@code approved} 불리언만 있었는데, 구현하면서 승인이라는 상태 전이의
+ * 행위자가 어디에도 남지 않는다는 것을 발견했다. INV-1 은 모든 상태 전이에
+ * 행위자를 요구하고 이 시스템의 전제가 "누가 무엇을 근거로 결정했는가"인데,
+ * 직무 분리를 검사해 놓고 그 검사를 통과한 사람이 누구였는지 기록하지
+ * 않으면 통제가 성립하지 않는다. {@code actorId} 는 개입을 <b>발생시킨</b>
+ * 심사자이지 승인자가 아니다.
  */
 @Entity
 @Table(
@@ -107,6 +115,18 @@ public class Intervention {
 
     /** 승인 여부. 승인 절차가 없는 오버라이드에서는 {@code null} 로 남는다. */
     private Boolean approved;
+
+    /** 승인·반려를 수행한 사용자. 처리 전이면 {@code null}. INV-1 이 요구하는 행위자다. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "approved_by")
+    private User approvedBy;
+
+    /** 승인·반려 시각. 처리 전이면 {@code null}. */
+    private LocalDateTime approvedAt;
+
+    /** 승인·반려 사유. 반려 시 기재를 권장한다. */
+    @Column(columnDefinition = "text")
+    private String approvalNote;
 
     /** 개입 발생 시각. */
     @CreationTimestamp
@@ -183,10 +203,19 @@ public class Intervention {
      * 권한에서 제외되는데(직무 분리, 보조수단성 ④), 그 검사는 승인 서비스가
      * 수행한다. 엔티티는 자기 필드만으로 판단할 수 없는 조건을 알지 못한다.
      *
+     * <p>승인 여부와 행위자·시각을 함께 기록한다. 셋을 나누어 설정할 수
+     * 있게 하면 승인 여부만 바뀌고 행위자가 비는 레코드가 만들어질 수 있다.
+     *
      * @param approvedByManager 승인이면 {@code true}, 반려이면 {@code false}
+     * @param approver 처리를 수행한 사용자
+     * @param at 처리 시각
+     * @param note 처리 사유. 없으면 {@code null}
      */
-    public void resolve(boolean approvedByManager) {
+    public void resolve(boolean approvedByManager, User approver, LocalDateTime at, String note) {
         this.approved = approvedByManager;
+        this.approvedBy = approver;
+        this.approvedAt = at;
+        this.approvalNote = note;
     }
 
     /**

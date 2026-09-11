@@ -1,5 +1,6 @@
 package com.claimtrace.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -37,6 +38,12 @@ import com.claimtrace.repository.ReviewRepository;
  *       승인할 수 있다. 역할을 코드에 고정하지 않는 이유는 발동 조건을
  *       데이터로 둔 것과 같다(D-5).</li>
  * </ul>
+ *
+ * <p><b>승인자와 시각을 함께 기록한다.</b> 최초 설계의 {@code interventions}
+ * 테이블에는 승인 여부 불리언만 있었고, 구현하면서 승인이라는 상태 전이의
+ * 행위자가 어디에도 남지 않는다는 것을 발견해 컬럼 세 개를 추가했다.
+ * 직무 분리를 검사해 놓고 그 검사를 통과한 사람을 기록하지 않으면,
+ * 사후에 "이 건은 누가 풀어줬는가"에 답할 수 없어 통제가 성립하지 않는다.
  *
  * <p><b>명세와의 차이</b> — OpenAPI 명세는 이 엔드포인트가 개입 하나를
  * 반환하도록 정의했다. 그러나 한 청구에 여러 정책이 동시에 발동할 수 있고,
@@ -96,7 +103,9 @@ public class InterventionApprovalService {
         verifySegregationOfDuties(claim, actor);
         pending.forEach(intervention -> verifyApproverRole(intervention, actor));
 
-        pending.forEach(intervention -> intervention.resolve(request.approved()));
+        LocalDateTime now = LocalDateTime.now();
+        pending.forEach(intervention ->
+                intervention.resolve(request.approved(), actor, now, request.note()));
 
         return pending.stream().map(InterventionResponse::from).toList();
     }

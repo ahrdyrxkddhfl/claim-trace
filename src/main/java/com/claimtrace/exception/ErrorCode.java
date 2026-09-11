@@ -68,11 +68,22 @@ public enum ErrorCode {
 
     /** E-9 · INV-10 · 미판정 항목이 남은 상태로 확정하려 한 경우. */
     PENDING_ITEMS_EXIST(
-            "판정되지 않은 항목이 있어 확정할 수 없습니다", "INV-10", HttpStatus.BAD_REQUEST),
+            "판정되지 않은 항목이 남아 있습니다", "INV-10", HttpStatus.BAD_REQUEST),
 
     /** E-10 · INV-11 · 기각 사유 없이 근거를 기각하려 한 경우. */
     REJECTION_REASON_REQUIRED(
             "근거를 기각하려면 기각 사유를 선택해야 합니다", "INV-11", HttpStatus.BAD_REQUEST),
+
+    /**
+     * 엔티티가 허용하지 않는 상태 전이를 시도한 경우. 불변조건과 무관하다.
+     *
+     * <p>서비스가 먼저 검사했어야 하는 경우에 대한 안전망이다. 이 코드로
+     * 응답이 나갔다면 어느 서비스에 검증이 한 겹 빠졌다는 신호이며,
+     * 그래서 특정 불변조건 번호를 달지 않는다. 번호를 달면 "설계 규칙이
+     * 정상 작동했다"로 읽혀 누락이 가려진다.
+     */
+    INVALID_STATE_TRANSITION(
+            "현재 상태에서 허용되지 않는 요청입니다", null, HttpStatus.CONFLICT),
 
     /** E-12 · 대상 자원이 존재하지 않는 경우. 불변조건과 무관하다. */
     RESOURCE_NOT_FOUND(

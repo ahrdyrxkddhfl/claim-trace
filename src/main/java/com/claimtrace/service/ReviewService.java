@@ -129,8 +129,8 @@ public class ReviewService {
                 .orElseThrow(() -> new ResourceNotFoundException("claimItem", itemId));
         Claim claim = item.getClaim();
 
-        // INV-7 — 확정된 청구는 판정을 바꿀 수 없다.
-        if (claim.isDecided()) {
+        // INV-7 — 확정·종결된 청구는 판정을 바꿀 수 없다.
+        if (claim.isLocked()) {
             throw new InvariantViolationException(
                     ErrorCode.CLAIM_ALREADY_DECIDED,
                     Map.of("claimNo", claim.getClaimNo(), "status", claim.getStatus().name()));

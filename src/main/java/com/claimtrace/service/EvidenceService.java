@@ -73,8 +73,8 @@ public class EvidenceService {
                 .orElseThrow(() -> new ResourceNotFoundException("evidence", evidenceId));
         Claim claim = evidence.getClaimItem().getClaim();
 
-        // INV-7 — 확정된 청구의 근거는 변경되지 않는다.
-        if (claim.isDecided()) {
+        // INV-7 — 확정·종결된 청구의 근거는 변경되지 않는다.
+        if (claim.isLocked()) {
             throw new InvariantViolationException(
                     ErrorCode.CLAIM_ALREADY_DECIDED,
                     Map.of("claimNo", claim.getClaimNo(), "evidenceId", evidenceId));
