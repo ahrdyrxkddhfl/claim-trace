@@ -36,7 +36,7 @@ public interface AiRecommendationRepository extends JpaRepository<AiRecommendati
     /**
      * 청구에 속한 모든 항목의 최신 AI 권고를 조회한다.
      *
-     * <p>화면 9 항목 목록과 개입 정책 평가에 쓴다. 정책의 발동 조건 중
+     * <p>화면 9 항목 목록과 개입 규칙 평가에 쓴다. 규칙의 발동 조건 중
      * {@code exclusionProbability} 가 이 값을 참조한다.
      *
      * @param claimId 청구 식별자

@@ -16,7 +16,7 @@ import com.claimtrace.domain.Customer;
 import com.claimtrace.domain.Evidence;
 import com.claimtrace.domain.Explanation;
 import com.claimtrace.domain.Intervention;
-import com.claimtrace.domain.InterventionPolicy;
+import com.claimtrace.domain.InterventionRule;
 import com.claimtrace.domain.Objection;
 import com.claimtrace.domain.Policy;
 import com.claimtrace.domain.Review;
@@ -122,7 +122,7 @@ class DomainTransitionTest {
                 .recommendation(ItemDecision.DENY)
                 .threshold(new BigDecimal("0.300")).build();
 
-        private final InterventionPolicy interventionPolicy = InterventionPolicy.builder()
+        private final InterventionRule interventionRule = InterventionRule.builder()
                 .code("P-07").name("비급여 고액 항목")
                 .conditions("[{\"field\":\"claimedAmount\",\"op\":\"gte\",\"value\":300000}]")
                 .requiredIntervention(InterventionType.DUAL_CHECK)
@@ -386,10 +386,10 @@ class DomainTransitionTest {
         }
 
         @Test
-        @DisplayName("INV-4 정책이 요구한 개입은 승인 전까지 확정을 막는다")
-        void 정책_개입은_승인_전까지_확정을_막는다() {
+        @DisplayName("INV-4 규칙이 요구한 개입은 승인 전까지 확정을 막는다")
+        void 규칙_개입은_승인_전까지_확정을_막는다() {
             Intervention required = Intervention.required(
-                    f.claim, f.interventionPolicy, "정책 P-07 조건 해당", f.reviewer);
+                    f.claim, f.interventionRule, "규칙 P-07 조건 해당", f.reviewer);
 
             assertEquals(InterventionType.DUAL_CHECK, required.getType());
             assertTrue(required.blocksDecision(), "승인 대기 중에는 확정을 막는다");
@@ -407,7 +407,7 @@ class DomainTransitionTest {
         @DisplayName("INV-1 승인에는 행위자와 시각이 함께 기록된다")
         void 승인에는_행위자와_시각이_기록된다() {
             Intervention required = Intervention.required(
-                    f.claim, f.interventionPolicy, "정책 조건 해당", f.reviewer);
+                    f.claim, f.interventionRule, "규칙 조건 해당", f.reviewer);
             LocalDateTime at = LocalDateTime.of(2026, 9, 17, 15, 0);
 
             required.resolve(true, f.manager, at, "소견서 확인 결과 승인한다.");

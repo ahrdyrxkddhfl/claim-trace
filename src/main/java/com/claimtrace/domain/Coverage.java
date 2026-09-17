@@ -60,7 +60,7 @@ public class Coverage {
     @Column(nullable = false, length = 100)
     private String name;
 
-    /** 담보 분류. 개입 정책의 발동 조건 필드이기도 하다. */
+    /** 담보 분류. 개입 규칙의 발동 조건 필드이기도 하다. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private CoverageType type;

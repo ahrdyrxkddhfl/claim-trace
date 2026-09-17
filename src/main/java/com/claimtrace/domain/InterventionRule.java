@@ -23,7 +23,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 인적 개입 정책. 발동 조건을 코드가 아니라 데이터로 둔다.
+ * 인적 개입 규칙. 발동 조건을 코드가 아니라 데이터로 둔다.
  *
  * <p>D-5 의 실체다. 복수인 확인 조건을 코드에 하드코딩하는 대안을 기각한
  * 이유는 보조수단성 점검항목 ⑤가 "인적 개입 방식을 적용하는 기준이
@@ -44,32 +44,32 @@ import lombok.NoArgsConstructor;
  * <p>본 구현이 지원하는 {@code field} 는 {@code claimedAmount},
  * {@code exclusionProbability}, {@code coverageType} 세 가지이고 {@code op} 는
  * {@code gte}, {@code lte}, {@code eq} 세 가지다. 기술서와 화면에 등장하는
- * 정책은 이 조합으로 모두 표현된다. 범용 룰 엔진을 만드는 것은 이 프로젝트가
+ * 규칙은 이 조합으로 모두 표현된다. 범용 조건 평가기을 만드는 것은 이 프로젝트가
  * 증명하려는 명제와 무관하므로 의도적으로 넓히지 않았다.
  *
  * <p>JSON 을 DB 의 JSON 타입이 아니라 문자열로 저장한다. H2 와 PostgreSQL 의
  * JSON 타입 취급이 다르고, 본 구현은 JSON 내부를 SQL 로 질의하지 않고
  * 애플리케이션에서 파싱해 평가한다.
  *
- * <p>정책을 수정해도 이미 저장된 판정에 소급 적용되지 않는다. 발동된 개입은
- * 어느 정책에 의한 것인지를 {@link Intervention} 이 FK 로 들고 있으므로,
+ * <p>규칙을 수정해도 이미 저장된 판정에 소급 적용되지 않는다. 발동된 개입은
+ * 어느 규칙에 의한 것인지를 {@link Intervention} 이 FK 로 들고 있으므로,
  * 조건이 바뀌어도 과거 개입의 근거는 그대로 남는다.
  */
 @Entity
-@Table(name = "intervention_policies")
+@Table(name = "intervention_rules")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class InterventionPolicy {
+public class InterventionRule {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 정책 코드. P-NN 형식이며 정책을 식별하는 자연키다. */
+    /** 규칙 코드. P-NN 형식이며 규칙을 식별하는 자연키다. */
     @Column(nullable = false, unique = true, length = 10)
     private String code;
 
-    /** 정책명. 예: 비급여 고액 항목 */
+    /** 규칙명. 예: 비급여 고액 항목 */
     @Column(nullable = false, length = 100)
     private String name;
 
@@ -86,16 +86,16 @@ public class InterventionPolicy {
     @Column(nullable = false, columnDefinition = "text")
     private String approverRoles;
 
-    /** 활성 여부. 비활성 정책은 새 개입을 요구하지 않는다. */
+    /** 활성 여부. 비활성 규칙은 새 개입을 요구하지 않는다. */
     @Column(nullable = false)
     private boolean active;
 
-    /** 이 정책을 작성한 심사관리자. */
+    /** 이 규칙을 작성한 심사관리자. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "author_id", nullable = false)
     private User author;
 
-    /** 정책 생성 시각. */
+    /** 규칙 생성 시각. */
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -104,10 +104,10 @@ public class InterventionPolicy {
     private LocalDateTime updatedAt;
 
     /**
-     * 개입 정책을 생성한다.
+     * 개입 규칙을 생성한다.
      *
-     * @param code 정책 코드
-     * @param name 정책명
+     * @param code 규칙 코드
+     * @param name 규칙명
      * @param conditions 발동 조건 배열의 JSON 문자열
      * @param requiredIntervention 요구되는 개입 유형
      * @param approverRoles 승인 가능 역할 배열의 JSON 문자열
@@ -115,7 +115,7 @@ public class InterventionPolicy {
      * @param author 작성한 심사관리자
      */
     @Builder
-    private InterventionPolicy(String code, String name, String conditions,
+    private InterventionRule(String code, String name, String conditions,
                                InterventionType requiredIntervention, String approverRoles,
                                boolean active, User author) {
         this.code = code;

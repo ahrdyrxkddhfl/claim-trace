@@ -8,9 +8,9 @@ package com.claimtrace.domain.enums;
  *   <li>{@code OVERRIDE} — 판정 저장 시 시스템이 자동 생성한다. 심사자가
  *       선언하지 않는다(D-7). 최신 AI 권고와 판정이 다르면 같은 트랜잭션에서
  *       생성된다.</li>
- *   <li>{@code DUAL_CHECK} — 개입 정책 조건에 걸린 청구에 대해 요구된다.
+ *   <li>{@code DUAL_CHECK} — 개입 규칙 조건에 걸린 청구에 대해 요구된다.
  *       승인 전에는 확정할 수 없다(INV-4).</li>
- *   <li>{@code ESCALATION} — 정책이 차상위 검토를 요구하는 경우.</li>
+ *   <li>{@code ESCALATION} — 규칙이 차상위 검토를 요구하는 경우.</li>
  * </ul>
  *
  * <p>{@code DUAL_CHECK} 와 {@code ESCALATION} 은 {@code approved} 필드를

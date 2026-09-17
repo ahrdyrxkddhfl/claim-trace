@@ -28,17 +28,17 @@ import lombok.NoArgsConstructor;
  *
  * <p>세 유형이 서로 다른 경로로 만들어진다. {@code OVERRIDE} 는 판정 저장과
  * 같은 트랜잭션에서 <b>시스템이</b> 생성하고, {@code DUAL_CHECK} 와
- * {@code ESCALATION} 은 정책 평가 결과로 요구된다.
+ * {@code ESCALATION} 은 규칙 평가 결과로 요구된다.
  *
  * <p>오버라이드를 심사자가 선언하지 않는 것이 D-7 이다. 별도 엔드포인트로
  * 개입 사실을 기록하게 하면 선언하지 않는 우회가 가능하고, 판정 저장과
  * 개입 기록이 다른 트랜잭션이라 원자성도 깨진다. AI 권고와 다른 판정을
  * 저장하는 행위 자체가 개입이므로 시스템이 판별하지 않을 이유가 없다.
  *
- * <p>{@code interventionPolicy} 필드가 가리키는 것은 보험 계약({@link Policy})이
- * 아니라 개입 정책({@link InterventionPolicy})이다. DBML 의 컬럼명이
+ * <p>{@code interventionRule} 필드가 가리키는 것은 보험 계약({@link Policy})이
+ * 아니라 개입 규칙({@link InterventionRule})이다. DBML 의 컬럼명이
  * {@code policy_id} 라 컬럼 매핑은 그대로 두되, 필드명은 혼동을 피해
- * 다르게 두었다. 같은 코드베이스에 {@code Claim.policy} 가 보험 계약으로
+ * 다르게 두었다. 같은 코드베이스에 {@code Claim.rule} 가 보험 계약으로
  * 존재하므로 이름이 겹치면 반드시 사고가 난다.
  *
  * <p>{@code approved} 는 승인 절차가 있는 유형에만 의미가 있다. 오버라이드는
@@ -58,7 +58,7 @@ import lombok.NoArgsConstructor;
         indexes = {
                 @Index(name = "idx_interventions_claim_type", columnList = "claim_id, type"),
                 @Index(name = "idx_interventions_actor_time", columnList = "actor_id, occurred_at"),
-                @Index(name = "idx_interventions_policy_time", columnList = "policy_id, occurred_at")
+                @Index(name = "idx_interventions_rule_time", columnList = "rule_id, occurred_at")
         }
 )
 @Getter
@@ -89,10 +89,10 @@ public class Intervention {
     @JoinColumn(name = "ai_recommendation_id")
     private AiRecommendation aiRecommendation;
 
-    /** 이 개입을 요구한 정책. 정책 발동이 아니면 {@code null}. */
+    /** 이 개입을 요구한 규칙. 규칙 발동이 아니면 {@code null}. */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "policy_id")
-    private InterventionPolicy interventionPolicy;
+    @JoinColumn(name = "rule_id")
+    private InterventionRule interventionRule;
 
     /** 개입 유형. */
     @Enumerated(EnumType.STRING)
@@ -135,14 +135,14 @@ public class Intervention {
 
     /** 모든 필드를 받는 내부 생성자. 유형별 정적 메서드를 통해서만 호출된다. */
     private Intervention(Claim claim, ClaimItem claimItem, Review review,
-                         AiRecommendation aiRecommendation, InterventionPolicy interventionPolicy,
+                         AiRecommendation aiRecommendation, InterventionRule interventionRule,
                          InterventionType type, OverrideReasonType overrideReasonType,
                          String reason, User actor) {
         this.claim = claim;
         this.claimItem = claimItem;
         this.review = review;
         this.aiRecommendation = aiRecommendation;
-        this.interventionPolicy = interventionPolicy;
+        this.interventionRule = interventionRule;
         this.type = type;
         this.overrideReasonType = overrideReasonType;
         this.reason = reason;
@@ -178,22 +178,22 @@ public class Intervention {
     }
 
     /**
-     * 정책이 요구한 개입을 기록한다.
+     * 규칙이 요구한 개입을 기록한다.
      *
      * <p>복수인 확인이나 차상위 검토처럼 승인 절차가 필요한 개입에 쓴다.
      * 생성 시점에는 승인 여부가 정해지지 않았으므로 {@code approved} 가
      * {@code null} 이고, 이 상태에서는 청구를 확정할 수 없다(INV-4).
      *
      * @param claim 개입이 요구된 청구
-     * @param policy 개입을 요구한 정책
+     * @param rule 개입을 요구한 규칙
      * @param reason 개입이 요구된 사유
      * @param actor 개입을 기록한 행위자
      * @return 승인 대기 상태의 개입 기록
      */
-    public static Intervention required(Claim claim, InterventionPolicy policy, String reason, User actor) {
+    public static Intervention required(Claim claim, InterventionRule rule, String reason, User actor) {
         return new Intervention(
-                claim, null, null, null, policy,
-                policy.getRequiredIntervention(), null, reason, actor);
+                claim, null, null, null, rule,
+                rule.getRequiredIntervention(), null, reason, actor);
     }
 
     /**

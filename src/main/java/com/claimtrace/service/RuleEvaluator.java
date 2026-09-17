@@ -7,16 +7,16 @@ import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
-import com.claimtrace.domain.InterventionPolicy;
+import com.claimtrace.domain.InterventionRule;
 import com.claimtrace.domain.enums.CoverageType;
 import com.claimtrace.domain.enums.UserRole;
-import com.claimtrace.exception.PolicyDefinitionException;
+import com.claimtrace.exception.RuleDefinitionException;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 개입 정책의 발동 조건을 평가한다. D-5 가 코드로 성립하는 자리.
+ * 개입 규칙의 발동 조건을 평가한다. D-5 가 코드로 성립하는 자리.
  *
  * <p>설계는 복수인 확인 조건을 코드에 하드코딩하는 대안을 기각했다. 보조수단성
  * 점검항목 ⑤가 "인적 개입 방식을 적용하는 기준이 <b>문서화</b>되어 있는가"를
@@ -27,7 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <p><b>지원 범위를 좁힌 것은 의도적이다.</b> 필드는 {@code claimedAmount},
  * {@code exclusionProbability}, {@code coverageType} 세 가지, 연산자는
  * {@code gte}, {@code lte}, {@code eq} 세 가지다. 기술서와 화면에 등장하는
- * 정책은 이 조합으로 전부 표현된다. 범용 규칙 엔진을 만드는 것은 이
+ * 규칙은 이 조합으로 전부 표현된다. 범용 조건 평가기을 만드는 것은 이
  * 시스템이 증명하려는 명제와 무관하고, 넓힐 때마다 검증할 조합이 늘어난다.
  * 새 필드를 더하는 일은 {@link #matches} 의 분기 하나를 추가하는 것이다.
  *
@@ -40,10 +40,10 @@ import tools.jackson.databind.json.JsonMapper;
  * ]
  * </pre>
  *
- * <p><b>정책은 항목 단위로 평가되고 청구 단위로 발동한다.</b> 청구 안의 어느
- * 항목 하나라도 모든 조건을 만족하면 그 청구에 정책이 발동한다. 위 예시의
+ * <p><b>규칙은 항목 단위로 평가되고 청구 단위로 발동한다.</b> 청구 안의 어느
+ * 항목 하나라도 모든 조건을 만족하면 그 청구에 규칙이 발동한다. 위 예시의
  * "비급여 고액 항목"이 뜻하는 바가 그것이다. 청구 전체의 합계로 판단하면
- * 소액 항목 여러 건이 모여 고액이 된 청구까지 통제 대상이 되어, 정책의
+ * 소액 항목 여러 건이 모여 고액이 된 청구까지 통제 대상이 되어, 규칙의
  * 이름과 동작이 어긋난다.
  *
  * <p><b>엔티티가 아니라 {@link Target} 을 받는다.</b> 평가에 필요한 것은 세
@@ -52,9 +52,9 @@ import tools.jackson.databind.json.JsonMapper;
  * 함수라 단위 테스트로 조합을 전부 훑을 수 있다.
  */
 @Component
-public class PolicyEvaluator {
+public class RuleEvaluator {
 
-    /** 정책 조건이 참조할 수 있는 필드. 여기 없는 이름은 정의 오류다. */
+    /** 규칙 조건이 참조할 수 있는 필드. 여기 없는 이름은 정의 오류다. */
     private static final String FIELD_CLAIMED_AMOUNT = "claimedAmount";
     private static final String FIELD_EXCLUSION_PROBABILITY = "exclusionProbability";
     private static final String FIELD_COVERAGE_TYPE = "coverageType";
@@ -76,12 +76,12 @@ public class PolicyEvaluator {
      *
      * @param jsonMapper JSON 파서
      */
-    public PolicyEvaluator(JsonMapper jsonMapper) {
+    public RuleEvaluator(JsonMapper jsonMapper) {
         this.jsonMapper = jsonMapper;
     }
 
     /**
-     * 정책 평가에 필요한 항목의 값.
+     * 규칙 평가에 필요한 항목의 값.
      *
      * <p>{@code exclusionProbability} 는 {@code null} 일 수 있다. 모델이 아직
      * 권고를 내놓지 않은 항목이 그렇다. 이 경우 확률을 참조하는 조건은
@@ -101,42 +101,42 @@ public class PolicyEvaluator {
     }
 
     /**
-     * 주어진 항목들에 발동하는 정책을 골라낸다.
+     * 주어진 항목들에 발동하는 규칙을 골라낸다.
      *
-     * @param policies 평가 대상 정책. 활성 정책만 넘긴다
+     * @param rules 평가 대상 규칙. 활성 규칙만 넘긴다
      * @param targets 청구에 속한 항목들의 평가용 값
-     * @return 발동하는 정책 목록. 없으면 빈 목록
-     * @throws PolicyDefinitionException 정책의 조건 정의를 해석할 수 없는 경우
+     * @return 발동하는 규칙 목록. 없으면 빈 목록
+     * @throws RuleDefinitionException 규칙의 조건 정의를 해석할 수 없는 경우
      */
-    public List<InterventionPolicy> findApplicable(List<InterventionPolicy> policies, List<Target> targets) {
-        List<InterventionPolicy> applicable = new ArrayList<>();
-        for (InterventionPolicy policy : policies) {
-            if (applies(policy, targets)) {
-                applicable.add(policy);
+    public List<InterventionRule> findApplicable(List<InterventionRule> rules, List<Target> targets) {
+        List<InterventionRule> applicable = new ArrayList<>();
+        for (InterventionRule rule : rules) {
+            if (applies(rule, targets)) {
+                applicable.add(rule);
             }
         }
         return applicable;
     }
 
     /**
-     * 정책이 발동하는지 판별한다.
+     * 규칙이 발동하는지 판별한다.
      *
      * <p>항목 중 하나라도 모든 조건을 만족하면 발동이다. 조건이 비어 있는
-     * 정책은 모든 청구에 발동하게 되므로 정의 오류로 본다. 실수로 조건을
-     * 지운 정책이 전 건에 복수인 확인을 요구하면 심사가 멈춘다.
+     * 규칙은 모든 청구에 발동하게 되므로 정의 오류로 본다. 실수로 조건을
+     * 지운 규칙이 전 건에 복수인 확인을 요구하면 심사가 멈춘다.
      *
-     * @param policy 평가할 정책
+     * @param rule 평가할 규칙
      * @param targets 항목들의 평가용 값
      * @return 발동하면 {@code true}
-     * @throws PolicyDefinitionException 조건이 비었거나 해석할 수 없는 경우
+     * @throws RuleDefinitionException 조건이 비었거나 해석할 수 없는 경우
      */
-    public boolean applies(InterventionPolicy policy, List<Target> targets) {
-        List<Map<String, Object>> conditions = parseConditions(policy);
+    public boolean applies(InterventionRule rule, List<Target> targets) {
+        List<Map<String, Object>> conditions = parseConditions(rule);
         if (conditions.isEmpty()) {
-            throw new PolicyDefinitionException(policy.getCode(), "발동 조건이 비어 있습니다");
+            throw new RuleDefinitionException(rule.getCode(), "발동 조건이 비어 있습니다");
         }
         for (Target target : targets) {
-            if (satisfiesAll(policy, target, conditions)) {
+            if (satisfiesAll(rule, target, conditions)) {
                 return true;
             }
         }
@@ -146,15 +146,15 @@ public class PolicyEvaluator {
     /**
      * 한 항목이 모든 조건을 만족하는지 확인한다.
      *
-     * @param policy 평가 중인 정책. 오류 메시지에 코드를 담기 위해 받는다
+     * @param rule 평가 중인 규칙. 오류 메시지에 코드를 담기 위해 받는다
      * @param target 평가할 항목의 값
      * @param conditions 조건 목록
      * @return 모든 조건을 만족하면 {@code true}
      */
-    private boolean satisfiesAll(InterventionPolicy policy, Target target,
+    private boolean satisfiesAll(InterventionRule rule, Target target,
                                  List<Map<String, Object>> conditions) {
         for (Map<String, Object> condition : conditions) {
-            if (!matches(policy, target, condition)) {
+            if (!matches(rule, target, condition)) {
                 return false;
             }
         }
@@ -164,43 +164,43 @@ public class PolicyEvaluator {
     /**
      * 조건 하나를 평가한다.
      *
-     * @param policy 평가 중인 정책
+     * @param rule 평가 중인 규칙
      * @param target 평가할 항목의 값
      * @param condition {@code field}, {@code op}, {@code value} 를 담은 조건
      * @return 조건을 만족하면 {@code true}
-     * @throws PolicyDefinitionException 필드나 연산자를 해석할 수 없는 경우
+     * @throws RuleDefinitionException 필드나 연산자를 해석할 수 없는 경우
      */
-    private boolean matches(InterventionPolicy policy, Target target, Map<String, Object> condition) {
-        String field = text(policy, condition, "field");
-        String op = text(policy, condition, "op");
+    private boolean matches(InterventionRule rule, Target target, Map<String, Object> condition) {
+        String field = text(rule, condition, "field");
+        String op = text(rule, condition, "op");
         Object value = condition.get("value");
         if (value == null) {
-            throw new PolicyDefinitionException(policy.getCode(), "조건 " + field + " 에 비교할 값이 없습니다");
+            throw new RuleDefinitionException(rule.getCode(), "조건 " + field + " 에 비교할 값이 없습니다");
         }
 
         return switch (field) {
             case FIELD_CLAIMED_AMOUNT -> compareNumber(
-                    policy, field, op, toDecimal(policy, field, target.claimedAmount()), toDecimal(policy, field, value));
+                    rule, field, op, toDecimal(rule, field, target.claimedAmount()), toDecimal(rule, field, value));
             case FIELD_EXCLUSION_PROBABILITY -> target.exclusionProbability() != null
-                    && compareNumber(policy, field, op, target.exclusionProbability(), toDecimal(policy, field, value));
-            case FIELD_COVERAGE_TYPE -> compareCoverageType(policy, op, target.coverageType(), value);
-            default -> throw new PolicyDefinitionException(
-                    policy.getCode(), "지원하지 않는 필드입니다: " + field);
+                    && compareNumber(rule, field, op, target.exclusionProbability(), toDecimal(rule, field, value));
+            case FIELD_COVERAGE_TYPE -> compareCoverageType(rule, op, target.coverageType(), value);
+            default -> throw new RuleDefinitionException(
+                    rule.getCode(), "지원하지 않는 필드입니다: " + field);
         };
     }
 
     /**
      * 수치 조건을 평가한다.
      *
-     * @param policy 평가 중인 정책
+     * @param rule 평가 중인 규칙
      * @param field 조건이 참조하는 필드명
      * @param op 연산자
      * @param actual 항목의 실제 값
      * @param expected 조건이 요구하는 값
      * @return 조건을 만족하면 {@code true}
-     * @throws PolicyDefinitionException 연산자를 해석할 수 없는 경우
+     * @throws RuleDefinitionException 연산자를 해석할 수 없는 경우
      */
-    private boolean compareNumber(InterventionPolicy policy, String field, String op,
+    private boolean compareNumber(InterventionRule rule, String field, String op,
                                   BigDecimal actual, BigDecimal expected) {
         if (actual == null) {
             return false;
@@ -209,8 +209,8 @@ public class PolicyEvaluator {
             case OP_GTE -> actual.compareTo(expected) >= 0;
             case OP_LTE -> actual.compareTo(expected) <= 0;
             case OP_EQ -> actual.compareTo(expected) == 0;
-            default -> throw new PolicyDefinitionException(
-                    policy.getCode(), field + " 에 지원하지 않는 연산자입니다: " + op);
+            default -> throw new RuleDefinitionException(
+                    rule.getCode(), field + " 에 지원하지 않는 연산자입니다: " + op);
         };
     }
 
@@ -220,74 +220,74 @@ public class PolicyEvaluator {
      * <p>{@code eq} 만 허용한다. 담보 분류에는 순서가 없으므로 크기 비교가
      * 성립하지 않는다. 열거형에 없는 값을 비교하는 것은 오류로 보지 않고
      * 단순히 만족하지 않는 것으로 처리하는데, 담보 분류가 나중에 추가될 수
-     * 있고 그때 옛 정책이 전부 500 을 내는 것보다 발동하지 않는 편이 낫다.
+     * 있고 그때 옛 규칙이 전부 500 을 내는 것보다 발동하지 않는 편이 낫다.
      *
-     * @param policy 평가 중인 정책
+     * @param rule 평가 중인 규칙
      * @param op 연산자
      * @param actual 항목의 담보 분류
      * @param value 조건이 요구하는 값
      * @return 조건을 만족하면 {@code true}
-     * @throws PolicyDefinitionException 연산자가 {@code eq} 가 아닌 경우
+     * @throws RuleDefinitionException 연산자가 {@code eq} 가 아닌 경우
      */
-    private boolean compareCoverageType(InterventionPolicy policy, String op,
+    private boolean compareCoverageType(InterventionRule rule, String op,
                                         CoverageType actual, Object value) {
         if (!OP_EQ.equals(op)) {
-            throw new PolicyDefinitionException(
-                    policy.getCode(), FIELD_COVERAGE_TYPE + " 에는 eq 만 사용할 수 있습니다: " + op);
+            throw new RuleDefinitionException(
+                    rule.getCode(), FIELD_COVERAGE_TYPE + " 에는 eq 만 사용할 수 있습니다: " + op);
         }
         return actual != null && actual.name().equals(String.valueOf(value));
     }
 
     /**
-     * 주어진 역할이 이 정책의 개입을 승인할 수 있는지 판별한다.
+     * 주어진 역할이 이 규칙의 개입을 승인할 수 있는지 판별한다.
      *
-     * <p>승인 가능 역할도 발동 조건과 마찬가지로 정책에 데이터로 들어 있다.
+     * <p>승인 가능 역할도 발동 조건과 마찬가지로 규칙에 데이터로 들어 있다.
      * 코드에 {@code REVIEW_MANAGER} 를 고정하면, 어떤 통제를 누가 풀 수
      * 있는지가 다시 코드에 묻힌다. 조건을 데이터로 둔 이유(D-5)가 승인
      * 권한에도 그대로 적용된다.
      *
-     * @param policy 개입을 요구한 정책
+     * @param rule 개입을 요구한 규칙
      * @param role 승인을 시도하는 사용자의 역할
      * @return 승인할 수 있으면 {@code true}
-     * @throws PolicyDefinitionException 승인 역할 목록이 비어 있는 경우
+     * @throws RuleDefinitionException 승인 역할 목록이 비어 있는 경우
      */
-    public boolean canApprove(InterventionPolicy policy, UserRole role) {
+    public boolean canApprove(InterventionRule rule, UserRole role) {
         List<String> roles = jsonMapper.readValue(
-                policy.getApproverRoles(), new TypeReference<List<String>>() { });
+                rule.getApproverRoles(), new TypeReference<List<String>>() { });
         if (roles.isEmpty()) {
-            throw new PolicyDefinitionException(policy.getCode(), "승인 가능 역할이 비어 있습니다");
+            throw new RuleDefinitionException(rule.getCode(), "승인 가능 역할이 비어 있습니다");
         }
         return role != null && roles.contains(role.name());
     }
 
     /**
-     * 정책의 조건 JSON 을 파싱한다.
+     * 규칙의 조건 JSON 을 파싱한다.
      *
      * <p>파싱에 실패하면 예외가 그대로 올라간다. Jackson 3 의 예외는
-     * 비검사 예외이며, 여기서 삼켜 빈 조건으로 취급하면 통제 정책이
+     * 비검사 예외이며, 여기서 삼켜 빈 조건으로 취급하면 통제 규칙이
      * 조용히 무력화된다.
      *
-     * @param policy 파싱할 정책
+     * @param rule 파싱할 규칙
      * @return 조건 목록
      */
-    private List<Map<String, Object>> parseConditions(InterventionPolicy policy) {
+    private List<Map<String, Object>> parseConditions(InterventionRule rule) {
         return jsonMapper.readValue(
-                policy.getConditions(), new TypeReference<List<Map<String, Object>>>() { });
+                rule.getConditions(), new TypeReference<List<Map<String, Object>>>() { });
     }
 
     /**
      * 조건에서 문자열 값을 꺼낸다.
      *
-     * @param policy 평가 중인 정책
+     * @param rule 평가 중인 규칙
      * @param condition 조건
      * @param key 꺼낼 키
      * @return 문자열 값
-     * @throws PolicyDefinitionException 값이 없는 경우
+     * @throws RuleDefinitionException 값이 없는 경우
      */
-    private String text(InterventionPolicy policy, Map<String, Object> condition, String key) {
+    private String text(InterventionRule rule, Map<String, Object> condition, String key) {
         Object value = condition.get(key);
         if (value == null) {
-            throw new PolicyDefinitionException(policy.getCode(), "조건에 " + key + " 가 없습니다");
+            throw new RuleDefinitionException(rule.getCode(), "조건에 " + key + " 가 없습니다");
         }
         return String.valueOf(value);
     }
@@ -300,13 +300,13 @@ public class PolicyEvaluator {
      * 경계에서 판정이 흔들리고, 그 경계가 곧 통제가 걸리는지 마는지의
      * 기준이 된다.
      *
-     * @param policy 평가 중인 정책
+     * @param rule 평가 중인 규칙
      * @param field 조건이 참조하는 필드명
      * @param value 변환할 값
      * @return 변환된 값. 인자가 {@code null} 이면 {@code null}
-     * @throws PolicyDefinitionException 수치로 해석할 수 없는 경우
+     * @throws RuleDefinitionException 수치로 해석할 수 없는 경우
      */
-    private BigDecimal toDecimal(InterventionPolicy policy, String field, Object value) {
+    private BigDecimal toDecimal(InterventionRule rule, String field, Object value) {
         if (value == null) {
             return null;
         }
@@ -319,8 +319,8 @@ public class PolicyEvaluator {
         try {
             return new BigDecimal(String.valueOf(value));
         } catch (NumberFormatException e) {
-            throw new PolicyDefinitionException(
-                    policy.getCode(), field + " 의 값을 수치로 해석할 수 없습니다: " + value);
+            throw new RuleDefinitionException(
+                    rule.getCode(), field + " 의 값을 수치로 해석할 수 없습니다: " + value);
         }
     }
 }

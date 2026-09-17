@@ -14,7 +14,7 @@ import com.claimtrace.domain.AiRecommendation;
 import com.claimtrace.domain.Claim;
 import com.claimtrace.domain.ClaimItem;
 import com.claimtrace.domain.Intervention;
-import com.claimtrace.domain.InterventionPolicy;
+import com.claimtrace.domain.InterventionRule;
 import com.claimtrace.domain.Review;
 import com.claimtrace.domain.User;
 import com.claimtrace.dto.InterventionResponse;
@@ -25,7 +25,7 @@ import com.claimtrace.exception.InvariantViolationException;
 import com.claimtrace.exception.ResourceNotFoundException;
 import com.claimtrace.repository.AiRecommendationRepository;
 import com.claimtrace.repository.ClaimItemRepository;
-import com.claimtrace.repository.InterventionPolicyRepository;
+import com.claimtrace.repository.InterventionRuleRepository;
 import com.claimtrace.repository.InterventionRepository;
 import com.claimtrace.repository.ReviewRepository;
 
@@ -45,10 +45,10 @@ import com.claimtrace.repository.ReviewRepository;
  *   <li>새 판정을 저장한다</li>
  *   <li>이전 판정의 현재 플래그를 내리고 대체 관계를 연결한다 (INV-12, D-6)</li>
  *   <li>오버라이드였다면 개입 기록을 만든다 (INV-3)</li>
- *   <li>개입 정책을 평가해 발동한 정책의 승인 대기 기록을 만든다 (D-5)</li>
+ *   <li>개입 규칙을 평가해 발동한 규칙의 승인 대기 기록을 만든다 (D-5)</li>
  * </ol>
  *
- * <p><b>정책 평가를 확정이 아니라 판정 저장 시점에 두는 이유</b> — 확정
+ * <p><b>규칙 평가를 확정이 아니라 판정 저장 시점에 두는 이유</b> — 확정
  * 시점에 승인 대기를 만들면, 심사자는 항목을 전부 판정하고 확정을 눌러야
  * 비로소 승인이 필요하다는 것을 알게 되고 그때부터 심사관리자를 기다린다.
  * 판정을 저장할 때 만들면 첫 항목을 판정하는 순간 승인 요청이 올라가고,
@@ -58,8 +58,8 @@ import com.claimtrace.repository.ReviewRepository;
  * 검사는 그대로 확정 서비스에 두고 대기 레코드 생성만 앞당기는 것이므로
  * 문서와 어긋나지 않는다.
  *
- * <p>같은 청구의 여러 항목을 차례로 판정하면 같은 정책이 반복 발동하므로,
- * 이미 기록된 정책은 다시 만들지 않는다.
+ * <p>같은 청구의 여러 항목을 차례로 판정하면 같은 규칙이 반복 발동하므로,
+ * 이미 기록된 규칙은 다시 만들지 않는다.
  *
  * <p><b>검증이 먼저이고 저장이 나중인 이유</b> — 5번 이후로는 실패할 수 없어야
  * 한다. 판정이 저장된 뒤에 개입 기록 생성이 실패하면, 롤백이 걸리더라도
@@ -95,8 +95,8 @@ public class ReviewService {
     private final ReviewRepository reviewRepository;
     private final AiRecommendationRepository aiRecommendationRepository;
     private final InterventionRepository interventionRepository;
-    private final InterventionPolicyRepository interventionPolicyRepository;
-    private final PolicyEvaluator policyEvaluator;
+    private final InterventionRuleRepository interventionRuleRepository;
+    private final RuleEvaluator ruleEvaluator;
 
     /**
      * 의존성을 주입받는다.
@@ -105,21 +105,21 @@ public class ReviewService {
      * @param reviewRepository 판정 조회·저장
      * @param aiRecommendationRepository AI 권고 조회
      * @param interventionRepository 개입 기록 저장
-     * @param interventionPolicyRepository 개입 정책 조회
-     * @param policyEvaluator 정책 발동 조건 평가
+     * @param interventionRuleRepository 개입 규칙 조회
+     * @param ruleEvaluator 규칙 발동 조건 평가
      */
     public ReviewService(ClaimItemRepository claimItemRepository,
                          ReviewRepository reviewRepository,
                          AiRecommendationRepository aiRecommendationRepository,
                          InterventionRepository interventionRepository,
-                         InterventionPolicyRepository interventionPolicyRepository,
-                         PolicyEvaluator policyEvaluator) {
+                         InterventionRuleRepository interventionRuleRepository,
+                         RuleEvaluator ruleEvaluator) {
         this.claimItemRepository = claimItemRepository;
         this.reviewRepository = reviewRepository;
         this.aiRecommendationRepository = aiRecommendationRepository;
         this.interventionRepository = interventionRepository;
-        this.interventionPolicyRepository = interventionPolicyRepository;
-        this.policyEvaluator = policyEvaluator;
+        this.interventionRuleRepository = interventionRuleRepository;
+        this.ruleEvaluator = ruleEvaluator;
     }
 
     /**
@@ -176,9 +176,9 @@ public class ReviewService {
             throw new InvariantViolationException(ErrorCode.OVERRIDE_REASON_REQUIRED, details);
         }
 
-        // D-5 — 발동하는 정책을 미리 평가한다. 조건 정의가 깨져 있으면 여기서
+        // D-5 — 발동하는 규칙을 미리 평가한다. 조건 정의가 깨져 있으면 여기서
         // 예외가 나므로, 저장이 시작되기 전에 실패가 끝난다.
-        List<InterventionPolicy> applicablePolicies = evaluatePolicies(claim);
+        List<InterventionRule> applicableRules = evaluateRules(claim);
 
         // 이전 현재 판정을 새 판정 저장 '전에' 읽어 둔다.
         // 저장 후에 읽으면 새 판정도 is_current = true 라 결과가 2건이 되어
@@ -217,23 +217,23 @@ public class ReviewService {
             interventionResponse = InterventionResponse.from(intervention);
         }
 
-        recordRequiredInterventions(claim, applicablePolicies, actor);
+        recordRequiredInterventions(claim, applicableRules, actor);
 
         return ReviewResponse.from(saved, interventionResponse);
     }
 
     /**
-     * 이 청구에 발동하는 개입 정책을 찾는다.
+     * 이 청구에 발동하는 개입 규칙을 찾는다.
      *
-     * <p>정책은 항목의 청구금액·담보 분류·최신 권고 확률을 본다. 세 값을
-     * 모아 {@link PolicyEvaluator.Target} 으로 만들어 넘기고, 평가기는
+     * <p>규칙은 항목의 청구금액·담보 분류·최신 권고 확률을 본다. 세 값을
+     * 모아 {@link RuleEvaluator.Target} 으로 만들어 넘기고, 평가기는
      * 엔티티를 모른 채 값만으로 판단한다.
      *
      * @param claim 평가 대상 청구
-     * @return 발동하는 정책 목록. 없으면 빈 목록
+     * @return 발동하는 규칙 목록. 없으면 빈 목록
      */
-    private List<InterventionPolicy> evaluatePolicies(Claim claim) {
-        List<InterventionPolicy> active = interventionPolicyRepository.findAllActive();
+    private List<InterventionRule> evaluateRules(Claim claim) {
+        List<InterventionRule> active = interventionRuleRepository.findAllActive();
         if (active.isEmpty()) {
             return List.of();
         }
@@ -245,38 +245,38 @@ public class ReviewService {
                         AiRecommendation::getExclusionProbability,
                         (first, second) -> first));
 
-        List<PolicyEvaluator.Target> targets = claimItemRepository
+        List<RuleEvaluator.Target> targets = claimItemRepository
                 .findAllByClaimIdWithCoverage(claim.getId()).stream()
-                .map(item -> new PolicyEvaluator.Target(
+                .map(item -> new RuleEvaluator.Target(
                         item.getId(),
                         item.getClaimedAmount(),
                         item.getCoverage().getType(),
                         probabilities.get(item.getId())))
                 .toList();
 
-        return policyEvaluator.findApplicable(active, targets);
+        return ruleEvaluator.findApplicable(active, targets);
     }
 
     /**
-     * 발동한 정책의 승인 대기 개입을 기록한다.
+     * 발동한 규칙의 승인 대기 개입을 기록한다.
      *
-     * <p>이미 같은 정책으로 기록된 개입이 있으면 건너뛴다. 같은 청구의 여러
-     * 항목을 차례로 판정하면 같은 정책이 반복 발동하는데, 그때마다 대기
+     * <p>이미 같은 규칙으로 기록된 개입이 있으면 건너뛴다. 같은 청구의 여러
+     * 항목을 차례로 판정하면 같은 규칙이 반복 발동하는데, 그때마다 대기
      * 레코드를 만들면 심사관리자가 같은 건을 여러 번 승인해야 하고 하나만
      * 승인되면 나머지가 대기로 남아 INV-4 가 확정을 계속 막는다.
      *
      * @param claim 대상 청구
-     * @param policies 발동한 정책 목록
+     * @param rules 발동한 규칙 목록
      * @param actor 판정을 내린 심사자
      */
-    private void recordRequiredInterventions(Claim claim, List<InterventionPolicy> policies, User actor) {
-        for (InterventionPolicy policy : policies) {
-            if (interventionRepository.existsByClaimIdAndPolicyId(claim.getId(), policy.getId())) {
+    private void recordRequiredInterventions(Claim claim, List<InterventionRule> rules, User actor) {
+        for (InterventionRule rule : rules) {
+            if (interventionRepository.existsByClaimIdAndRuleId(claim.getId(), rule.getId())) {
                 continue;
             }
-            String reason = "정책 " + policy.getCode() + "(" + policy.getName()
-                    + ") 조건에 해당해 " + policy.getRequiredIntervention().getLabel() + "이 요구되었습니다.";
-            interventionRepository.save(Intervention.required(claim, policy, reason, actor));
+            String reason = "규칙 " + rule.getCode() + "(" + rule.getName()
+                    + ") 조건에 해당해 " + rule.getRequiredIntervention().getLabel() + "이 요구되었습니다.";
+            interventionRepository.save(Intervention.required(claim, rule, reason, actor));
         }
     }
 

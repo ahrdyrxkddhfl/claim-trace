@@ -84,10 +84,10 @@ INSERT INTO rules (id, code, version, name, coverage_type, article_no, article_t
  'CUSTOMER', TRUE, 3, NULL, '2025-09-12 16:30:00');
 
 
--- ── 인적 개입 정책 ───────────────────────────────────────────
+-- ── 인적 개입 규칙 ───────────────────────────────────────────
 -- conditions 의 field 는 claimedAmount / exclusionProbability / coverageType,
 -- op 는 gte / lte / eq 만 지원한다. 모든 조건은 AND 로 결합된다.
-INSERT INTO intervention_policies (id, code, name, conditions, required_intervention, approver_roles, active, author_id, created_at, updated_at) VALUES
+INSERT INTO intervention_rules (id, code, name, conditions, required_intervention, approver_roles, active, author_id, created_at, updated_at) VALUES
 (1, 'P-07', '비급여 고액 항목',
  '[{"field":"coverageType","op":"eq","value":"DISEASE_UNCOVERED"},{"field":"claimedAmount","op":"gte","value":300000}]',
  'DUAL_CHECK', '["REVIEW_MANAGER"]', TRUE, 3, '2026-01-15 10:00:00', NULL),
@@ -220,7 +220,7 @@ ALTER TABLE customers             ALTER COLUMN id RESTART WITH 100;
 ALTER TABLE policies              ALTER COLUMN id RESTART WITH 100;
 ALTER TABLE coverages             ALTER COLUMN id RESTART WITH 100;
 ALTER TABLE rules                 ALTER COLUMN id RESTART WITH 100;
-ALTER TABLE intervention_policies ALTER COLUMN id RESTART WITH 100;
+ALTER TABLE intervention_rules ALTER COLUMN id RESTART WITH 100;
 ALTER TABLE claims                ALTER COLUMN id RESTART WITH 100;
 ALTER TABLE documents             ALTER COLUMN id RESTART WITH 100;
 ALTER TABLE claim_items           ALTER COLUMN id RESTART WITH 100;

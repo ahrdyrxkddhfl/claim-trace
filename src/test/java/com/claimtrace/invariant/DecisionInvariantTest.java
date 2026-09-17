@@ -32,17 +32,17 @@ class DecisionInvariantTest extends InvariantTestSupport {
     }
 
     @Test
-    @DisplayName("INV-4 정책이 요구한 승인 없이는 확정할 수 없다")
-    void 정책이_요구한_승인_없이는_확정할_수_없다() throws Exception {
+    @DisplayName("INV-4 규칙이 요구한 승인 없이는 확정할 수 없다")
+    void 규칙이_요구한_승인_없이는_확정할_수_없다() throws Exception {
         reviewAllItemsFollowingAi();
 
         // 도수치료 항목이 P-07(비급여 · 30만원 이상)과 P-03(확률 0.8 이상)에
-        // 걸린다. 두 정책의 조건은 코드가 아니라 DB 의 JSON 에 있다 (D-5).
+        // 걸린다. 두 규칙의 조건은 코드가 아니라 DB 의 JSON 에 있다 (D-5).
         decide(CLAIM_IN_REVIEW, REVIEWER)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("DUAL_CHECK_REQUIRED"))
                 .andExpect(jsonPath("$.invariant").value("INV-4"))
-                .andExpect(jsonPath("$.details.policyCodes").isNotEmpty());
+                .andExpect(jsonPath("$.details.ruleCodes").isNotEmpty());
     }
 
     @Test
@@ -59,11 +59,11 @@ class DecisionInvariantTest extends InvariantTestSupport {
     }
 
     @Test
-    @DisplayName("INV-4 정책이 지정하지 않은 역할은 승인할 수 없다")
-    void 정책이_지정하지_않은_역할은_승인할_수_없다() throws Exception {
+    @DisplayName("INV-4 규칙이 지정하지 않은 역할은 승인할 수 없다")
+    void 규칙이_지정하지_않은_역할은_승인할_수_없다() throws Exception {
         reviewAllItemsFollowingAi();
 
-        // 이도현은 심사자다. 정책의 approverRoles 는 REVIEW_MANAGER 만 허용한다.
+        // 이도현은 심사자다. 규칙의 approverRoles 는 REVIEW_MANAGER 만 허용한다.
         resolveDualCheck(CLAIM_IN_REVIEW, OTHER_REVIEWER, """
                 {"approved":true}
                 """)

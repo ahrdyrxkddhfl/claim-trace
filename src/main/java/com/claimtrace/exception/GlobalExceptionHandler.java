@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * <ul>
  *   <li>{@link InvariantViolationException} — 서비스가 던지는 설계 위반</li>
  *   <li>{@link ResourceNotFoundException} — 대상 없음</li>
- *   <li>{@link PolicyDefinitionException} — 개입 정책 데이터 오류</li>
+ *   <li>{@link RuleDefinitionException} — 개입 규칙 데이터 오류</li>
  *   <li>{@link MethodArgumentNotValidException} — 요청 본문의 형식 검증 실패</li>
  *   <li>{@link IllegalArgumentException}, {@link IllegalStateException} —
  *       엔티티가 스스로 막은 경우</li>
@@ -66,18 +66,18 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 개입 정책 정의 오류를 처리한다.
+     * 개입 규칙 정의 오류를 처리한다.
      *
-     * <p>운영 데이터의 문제이므로 500 이다. 어느 정책이 문제인지 응답에
+     * <p>운영 데이터의 문제이므로 500 이다. 어느 규칙이 문제인지 응답에
      * 담아 심사관리자가 화면 12 에서 바로 찾아갈 수 있게 한다.
      *
      * @param ex 발생한 예외
-     * @return 500 과 정책 코드·문제 설명을 담은 본문
+     * @return 500 과 규칙 코드·문제 설명을 담은 본문
      */
-    @ExceptionHandler(PolicyDefinitionException.class)
-    public ResponseEntity<ErrorResponse> handlePolicyDefinition(PolicyDefinitionException ex) {
-        return ResponseEntity.status(ErrorCode.POLICY_DEFINITION_INVALID.getStatus())
-                .body(ErrorResponse.of(ErrorCode.POLICY_DEFINITION_INVALID, ex.getDetails()));
+    @ExceptionHandler(RuleDefinitionException.class)
+    public ResponseEntity<ErrorResponse> handleRuleDefinition(RuleDefinitionException ex) {
+        return ResponseEntity.status(ErrorCode.RULE_DEFINITION_INVALID.getStatus())
+                .body(ErrorResponse.of(ErrorCode.RULE_DEFINITION_INVALID, ex.getDetails()));
     }
 
     /**

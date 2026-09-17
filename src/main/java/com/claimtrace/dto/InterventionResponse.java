@@ -28,7 +28,7 @@ import com.claimtrace.domain.enums.OverrideReasonType;
  * @param approvedBy 승인·반려를 수행한 사용자 성명. 처리 전이면 {@code null}
  * @param approvedAt 승인·반려 시각. 처리 전이면 {@code null}
  * @param approvalNote 승인·반려 사유. 없으면 {@code null}
- * @param policyCode 발동 정책 코드. 정책 발동이 아니면 {@code null}
+ * @param ruleCode 발동 규칙 코드. 규칙 발동이 아니면 {@code null}
  * @param recommendation 뒤집힌 AI 권고. 오버라이드가 아니면 {@code null}
  * @param occurredAt 발생 시각
  */
@@ -45,7 +45,7 @@ public record InterventionResponse(
         String approvedBy,
         LocalDateTime approvedAt,
         String approvalNote,
-        String policyCode,
+        String ruleCode,
         RecommendationSnapshot recommendation,
         LocalDateTime occurredAt) {
 
@@ -90,8 +90,8 @@ public record InterventionResponse(
                 intervention.getApprovedBy() == null ? null : intervention.getApprovedBy().getName(),
                 intervention.getApprovedAt(),
                 intervention.getApprovalNote(),
-                intervention.getInterventionPolicy() == null
-                        ? null : intervention.getInterventionPolicy().getCode(),
+                intervention.getInterventionRule() == null
+                        ? null : intervention.getInterventionRule().getCode(),
                 snapshot,
                 intervention.getOccurredAt());
     }

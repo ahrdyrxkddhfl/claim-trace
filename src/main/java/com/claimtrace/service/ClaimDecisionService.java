@@ -30,16 +30,16 @@ import com.claimtrace.domain.enums.InterventionType;
  * <p>청구 전체를 봐야 판단할 수 있는 두 불변조건이 여기 있다.
  * <ul>
  *   <li>INV-10 — 모든 항목에 현재 판정이 있어야 확정할 수 있다</li>
- *   <li>INV-4 — 정책이 요구한 개입이 승인되어야 확정할 수 있다</li>
+ *   <li>INV-4 — 규칙이 요구한 개입이 승인되어야 확정할 수 있다</li>
  * </ul>
  *
  * <p>둘 다 항목 하나나 판정 하나만 보아서는 판별되지 않는다. 판정 저장
  * 시점으로 앞당길 수 없는 검사이며, 그래서 확정이라는 별도의 진입점이
  * 존재한다.
  *
- * <p><b>정책 발동 여부는 여기서 다시 평가하지 않는다.</b> 판정을 저장할 때
+ * <p><b>규칙 발동 여부는 여기서 다시 평가하지 않는다.</b> 판정을 저장할 때
  * 이미 평가해 승인 대기 개입을 기록해 두었으므로, 확정은 그 개입들이
- * 해소되었는지만 본다. 확정 시점에 다시 평가하면 정책이 그 사이에 수정된
+ * 해소되었는지만 본다. 확정 시점에 다시 평가하면 규칙이 그 사이에 수정된
  * 경우 판정 당시와 다른 기준이 적용되는데, 화면 12 는 "조건 변경이 기존
  * 판정에 소급 적용되지 않는다"고 규정했다. 기록된 개입을 보는 방식이
  * 그 규정을 자연스럽게 지킨다.
@@ -155,22 +155,22 @@ public class ClaimDecisionService {
     /**
      * 확정을 막고 있는 개입을 응답 상세로 옮긴다.
      *
-     * <p>어느 정책 때문에 막혔는지 알려주지 않으면 심사자는 화면 13 의 어느
+     * <p>어느 규칙 때문에 막혔는지 알려주지 않으면 심사자는 화면 13 의 어느
      * 건을 승인해 달라고 요청해야 하는지 알 수 없다.
      *
      * @param blocking 확정을 막는 개입 목록
-     * @return 정책 코드와 개입 유형을 담은 상세
+     * @return 규칙 코드와 개입 유형을 담은 상세
      */
     private Map<String, Object> describeBlocking(List<Intervention> blocking) {
-        List<String> policyCodes = blocking.stream()
-                .map(Intervention::getInterventionPolicy)
-                .filter(policy -> policy != null)
-                .map(policy -> policy.getCode())
+        List<String> ruleCodes = blocking.stream()
+                .map(Intervention::getInterventionRule)
+                .filter(rule -> rule != null)
+                .map(rule -> rule.getCode())
                 .toList();
 
         Map<String, Object> details = new LinkedHashMap<>();
-        details.put("policyCode", policyCodes.isEmpty() ? null : policyCodes.get(0));
-        details.put("policyCodes", policyCodes);
+        details.put("ruleCode", ruleCodes.isEmpty() ? null : ruleCodes.get(0));
+        details.put("ruleCodes", ruleCodes);
         details.put("pendingInterventionIds", blocking.stream().map(Intervention::getId).toList());
         return details;
     }

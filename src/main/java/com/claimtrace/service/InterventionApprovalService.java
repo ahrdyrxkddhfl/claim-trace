@@ -9,7 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.claimtrace.domain.Claim;
 import com.claimtrace.domain.Intervention;
-import com.claimtrace.domain.InterventionPolicy;
+import com.claimtrace.domain.InterventionRule;
 import com.claimtrace.domain.Review;
 import com.claimtrace.domain.User;
 import com.claimtrace.dto.DualCheckRequest;
@@ -34,7 +34,7 @@ import com.claimtrace.repository.ReviewRepository;
  *       절차상 두 단계를 거쳤어도 같은 사람이라면 실질은 단독 확정이고,
  *       INV-4 가 금지하는 것이 바로 그것이다. 보조수단성 점검항목 ④에
  *       대응한다.</li>
- *   <li><b>승인 권한</b> — 정책이 {@code approverRoles} 에 지정한 역할만
+ *   <li><b>승인 권한</b> — 규칙이 {@code approverRoles} 에 지정한 역할만
  *       승인할 수 있다. 역할을 코드에 고정하지 않는 이유는 발동 조건을
  *       데이터로 둔 것과 같다(D-5).</li>
  * </ul>
@@ -46,8 +46,8 @@ import com.claimtrace.repository.ReviewRepository;
  * 사후에 "이 건은 누가 풀어줬는가"에 답할 수 없어 통제가 성립하지 않는다.
  *
  * <p><b>명세와의 차이</b> — OpenAPI 명세는 이 엔드포인트가 개입 하나를
- * 반환하도록 정의했다. 그러나 한 청구에 여러 정책이 동시에 발동할 수 있고,
- * 시드의 청구가 실제로 {@code P-07} 과 {@code P-03} 두 정책에 걸린다.
+ * 반환하도록 정의했다. 그러나 한 청구에 여러 규칙이 동시에 발동할 수 있고,
+ * 시드의 청구가 실제로 {@code P-07} 과 {@code P-03} 두 규칙에 걸린다.
  * 승인은 청구 단위의 행위이므로 대기 중인 개입을 한 번에 처리하고 목록을
  * 반환한다. 명세가 청구당 복수인 확인이 하나라고 가정한 것으로 보이며,
  * 이 차이는 기술서의 미해결 항목에 남긴다.
@@ -58,7 +58,7 @@ public class InterventionApprovalService {
     private final ClaimRepository claimRepository;
     private final InterventionRepository interventionRepository;
     private final ReviewRepository reviewRepository;
-    private final PolicyEvaluator policyEvaluator;
+    private final RuleEvaluator ruleEvaluator;
 
     /**
      * 의존성을 주입받는다.
@@ -66,16 +66,16 @@ public class InterventionApprovalService {
      * @param claimRepository 청구 조회
      * @param interventionRepository 개입 이력 조회
      * @param reviewRepository 현재 판정 조회. 직무 분리 검사에 쓴다
-     * @param policyEvaluator 승인 권한 판별
+     * @param ruleEvaluator 승인 권한 판별
      */
     public InterventionApprovalService(ClaimRepository claimRepository,
                                        InterventionRepository interventionRepository,
                                        ReviewRepository reviewRepository,
-                                       PolicyEvaluator policyEvaluator) {
+                                       RuleEvaluator ruleEvaluator) {
         this.claimRepository = claimRepository;
         this.interventionRepository = interventionRepository;
         this.reviewRepository = reviewRepository;
-        this.policyEvaluator = policyEvaluator;
+        this.ruleEvaluator = ruleEvaluator;
     }
 
     /**
@@ -136,11 +136,11 @@ public class InterventionApprovalService {
     }
 
     /**
-     * 정책이 지정한 승인 권한을 가진 사용자인지 확인한다.
+     * 규칙이 지정한 승인 권한을 가진 사용자인지 확인한다.
      *
-     * <p>정책 없이 만들어진 개입은 승인 역할을 판별할 근거가 없으므로
+     * <p>규칙 없이 만들어진 개입은 승인 역할을 판별할 근거가 없으므로
      * 심사관리자만 처리할 수 있는 것으로 본다. 현재 구현에서 승인 대기
-     * 개입은 모두 정책으로부터 생성되지만, 나중에 다른 경로가 생겨도
+     * 개입은 모두 규칙으로부터 생성되지만, 나중에 다른 경로가 생겨도
      * 권한이 열려 있는 상태로 남지 않게 한다.
      *
      * @param intervention 처리할 개입
@@ -148,15 +148,15 @@ public class InterventionApprovalService {
      * @throws InvariantViolationException 승인 권한이 없는 경우
      */
     private void verifyApproverRole(Intervention intervention, User actor) {
-        InterventionPolicy policy = intervention.getInterventionPolicy();
-        boolean permitted = policy == null
+        InterventionRule rule = intervention.getInterventionRule();
+        boolean permitted = rule == null
                 ? actor.isReviewManager()
-                : policyEvaluator.canApprove(policy, actor.getRole());
+                : ruleEvaluator.canApprove(rule, actor.getRole());
         if (!permitted) {
             throw new InvariantViolationException(
                     ErrorCode.APPROVER_ROLE_REQUIRED,
                     Map.of("actorRole", actor.getRole().name(),
-                            "policyCode", policy == null ? "-" : policy.getCode()));
+                            "ruleCode", rule == null ? "-" : rule.getCode()));
         }
     }
 }

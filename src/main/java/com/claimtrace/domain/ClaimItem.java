@@ -84,7 +84,7 @@ public class ClaimItem {
     @Column(nullable = false)
     private Short quantity;
 
-    /** 청구금액(원). 개입 정책의 발동 조건 필드이기도 하다. */
+    /** 청구금액(원). 개입 규칙의 발동 조건 필드이기도 하다. */
     @Column(nullable = false)
     private Integer claimedAmount;
 

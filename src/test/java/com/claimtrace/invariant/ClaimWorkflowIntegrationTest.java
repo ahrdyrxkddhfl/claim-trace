@@ -55,7 +55,7 @@ class ClaimWorkflowIntegrationTest extends InvariantTestSupport {
         reviewFourItemsWithOneOverride();
 
         // 2. 개입 규칙이 요구한 승인이 없어 확정이 거부된다.
-        //    조건은 코드가 아니라 intervention_policies 의 JSON 에 있다 (D-5).
+        //    조건은 코드가 아니라 intervention_rules 의 JSON 에 있다 (D-5).
         decide(CLAIM_IN_REVIEW, REVIEWER)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("DUAL_CHECK_REQUIRED"))
