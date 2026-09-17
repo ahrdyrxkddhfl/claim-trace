@@ -75,4 +75,69 @@ class EvidenceInvariantTest extends InvariantTestSupport {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
+
+    @Test
+    @DisplayName("심사자가 추가한 근거는 즉시 채택 상태다")
+    void 심사자가_추가한_근거는_즉시_채택_상태다() throws Exception {
+        createEvidence(ITEM_MANUAL_THERAPY, REVIEWER, """
+                {"polarity":"POSITIVE","disclosureLevel":"CUSTOMER",
+                 "contentInternal":"담당의 소견서에 치료 필요성이 명시되어 있다.",
+                 "contentCustomer":"담당 의사 선생님의 소견서에서 치료가 필요했다는 점이 확인되었습니다.",
+                 "targetAmount":120000}
+                """)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.source").value("MANUAL"))
+                .andExpect(jsonPath("$.status").value("ADOPTED"))
+                .andExpect(jsonPath("$.decidedBy").value("김영희"))
+                .andExpect(jsonPath("$.rule").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("고객용 근거에 고객용 문구가 없으면 추가할 수 없다")
+    void 고객용_근거에_고객용_문구가_없으면_추가할_수_없다() throws Exception {
+        // 설계 문서가 규정하지 않았던 조건이다. 그대로 두면 설명문 생성 시
+        // 조용히 걸러져, 심사자는 공개했다고 믿지만 고객 문서에는 없다.
+        createEvidence(ITEM_MANUAL_THERAPY, REVIEWER, """
+                {"polarity":"NEGATIVE","disclosureLevel":"CUSTOMER",
+                 "contentInternal":"시행 간격이 과도하다."}
+                """)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CUSTOMER_CONTENT_REQUIRED"));
+    }
+
+    @Test
+    @DisplayName("내부용 근거는 고객용 문구 없이 추가할 수 있다")
+    void 내부용_근거는_고객용_문구_없이_추가할_수_있다() throws Exception {
+        createEvidence(ITEM_MANUAL_THERAPY, REVIEWER, """
+                {"polarity":"NEGATIVE","disclosureLevel":"INTERNAL",
+                 "contentInternal":"동일 의료기관의 유사 청구 이력이 확인된다."}
+                """)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.disclosureLevel").value("INTERNAL"))
+                .andExpect(jsonPath("$.contentCustomer").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("다른 청구의 서류는 근거로 지목할 수 없다")
+    void 다른_청구의_서류는_근거로_지목할_수_없다() throws Exception {
+        // 서류 4는 확정된 청구 2에 속한다. 청구 1의 항목에 연결하면
+        // 판정의 출처를 추적했을 때 존재하지 않는 경로가 나온다.
+        createEvidence(ITEM_MANUAL_THERAPY, REVIEWER, """
+                {"polarity":"POSITIVE","disclosureLevel":"INTERNAL",
+                 "contentInternal":"타 청구 서류 연결 시도","documentId":4}
+                """)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("INV-7 확정된 청구에는 근거를 추가할 수 없다")
+    void 확정된_청구에는_근거를_추가할_수_없다() throws Exception {
+        createEvidence(5L, REVIEWER, """
+                {"polarity":"POSITIVE","disclosureLevel":"INTERNAL",
+                 "contentInternal":"확정 후 근거 추가 시도"}
+                """)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.invariant").value("INV-7"));
+    }
 }

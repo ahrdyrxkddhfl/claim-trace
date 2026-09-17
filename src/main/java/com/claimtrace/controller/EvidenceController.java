@@ -2,15 +2,18 @@ package com.claimtrace.controller;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.claimtrace.domain.User;
+import com.claimtrace.dto.EvidenceCreateRequest;
 import com.claimtrace.dto.EvidenceResponse;
 import com.claimtrace.dto.EvidenceStatusRequest;
 import com.claimtrace.service.EvidenceService;
@@ -96,5 +99,45 @@ public class EvidenceController {
     })
     public ResponseEntity<List<EvidenceResponse>> findByItem(@PathVariable Long itemId) {
         return ResponseEntity.ok(evidenceService.findByItem(itemId));
+    }
+
+    /**
+     * 심사자가 항목에 근거를 직접 추가한다.
+     *
+     * <p>룰이 잡지 못했거나 모델이 산출하지 못한 판단 근거를 넣는 경로다.
+     * 사람이 판단해 넣은 것이므로 생성 즉시 채택 상태가 된다.
+     *
+     * @param itemId 근거를 추가할 항목 식별자
+     * @param actorId 행위자 식별자. 인증을 대신하는 헤더다
+     * @param request 근거 내용
+     * @return 201 과 생성된 근거
+     */
+    @PostMapping("/claim-items/{itemId}/evidences")
+    @Operation(
+            summary = "근거 직접 추가",
+            description = """
+                    심사자가 판단 근거를 직접 추가한다. 생성 즉시 채택 상태다.
+
+                    검증: INV-6 배정 확인 · INV-7 확정 여부 · 고객용 근거의 문구 존재
+
+                    공개 수준이 CUSTOMER 인데 고객용 문구가 없으면 거부한다. 그대로 두면
+                    설명문 생성 시 조용히 걸러져, 심사자는 공개했다고 믿지만 고객 문서에는
+                    나타나지 않는다.
+                    """)
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "근거 추가 완료"),
+            @ApiResponse(responseCode = "400", description = "요청 형식 오류 · 고객용 문구 누락"),
+            @ApiResponse(responseCode = "403", description = "타 심사자 배정 건 (E-5)"),
+            @ApiResponse(responseCode = "404", description = "대상 항목 없음 · 지목한 서류가 이 청구의 것이 아님"),
+            @ApiResponse(responseCode = "409", description = "이미 확정된 청구 (E-6)")
+    })
+    public ResponseEntity<EvidenceResponse> create(
+            @PathVariable Long itemId,
+            @RequestHeader("X-Actor-Id") Long actorId,
+            @Valid @RequestBody EvidenceCreateRequest request) {
+
+        User actor = actorResolver.resolve(actorId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(evidenceService.create(itemId, request, actor));
     }
 }

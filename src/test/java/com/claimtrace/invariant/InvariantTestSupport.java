@@ -164,6 +164,22 @@ abstract class InvariantTestSupport {
     }
 
     /**
+     * 심사자가 항목에 근거를 직접 추가한다.
+     *
+     * @param itemId 항목 식별자
+     * @param actorId 행위자 식별자
+     * @param body 요청 본문 JSON
+     * @return 응답 검증을 이어갈 수 있는 결과
+     * @throws Exception 요청 수행 중 오류
+     */
+    protected ResultActions createEvidence(long itemId, long actorId, String body) throws Exception {
+        return mockMvc.perform(post("/claim-items/{itemId}/evidences", itemId)
+                .header("X-Actor-Id", actorId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    /**
      * 항목의 근거 카드 목록을 조회한다.
      *
      * @param itemId 항목 식별자
