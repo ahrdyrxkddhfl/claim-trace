@@ -37,7 +37,8 @@ import com.claimtrace.repository.ReviewRepository;
  *
  * <p><b>한 트랜잭션에서 일어나는 일</b>
  * <ol>
- *   <li>항목과 청구를 읽고 접근 조건을 확인한다 (INV-6, INV-7)</li>
+ *   <li>항목 행을 배타 잠금으로 읽는다 (INV-12)</li>
+ *   <li>청구의 접근 조건을 확인한다 (INV-6, INV-7)</li>
  *   <li>판정 사유가 있는지 확인한다 (INV-2)</li>
  *   <li>최신 AI 권고와 판정을 비교한다 (D-7)</li>
  *   <li>다르면 오버라이드 사유가 있는지 확인한다 (INV-3)</li>
@@ -69,6 +70,17 @@ import com.claimtrace.repository.ReviewRepository;
  * {@code superseded_by} 에 넣을 새 판정의 식별자는 저장 후에야 생긴다.
  * 설계 문서에는 플래그 해제가 먼저 적혀 있지만 구현에서는 순서가 뒤집힌다.
  * 두 작업이 같은 트랜잭션에 있으므로 결과는 같다.
+ *
+ * <p><b>동시 요청에서 INV-12 가 깨지는 경로가 있었다.</b> 이전 판정 조회와 새
+ * 판정 저장 사이에 다른 요청이 끼어들면 두 요청 모두 "이전 판정 없음"을
+ * 읽어 현재 판정이 2건이 된다. H2 는 부분 UNIQUE 인덱스를 지원하지 않아
+ * DB 도 이를 막지 못한다. 심사자가 탭 두 개에서 저장하거나 응답이 느려
+ * 버튼을 두 번 누르면 재현되는 상황이다.
+ *
+ * <p>항목 행에 배타 잠금을 걸어 막는다. 낙관적 락 대신 비관적 락을 고른
+ * 것은, 경합이 드물지 않고 충돌 시 요청을 실패시키는 것보다 기다리게 하는
+ * 편이 심사 업무에 맞기 때문이다. 판정 저장은 짧은 트랜잭션이라 대기가
+ * 길지 않다.
  *
  * <p><b>개입 기록을 심사자가 선언하지 않는다</b> — 3번과 7번이 D-7 의 전부다.
  * 심사자는 판정과 사유만 보내고, 그것이 개입인지 아닌지는 시스템이
@@ -125,7 +137,11 @@ public class ReviewService {
      */
     @Transactional
     public ReviewResponse save(Long itemId, ReviewRequest request, User actor) {
-        ClaimItem item = claimItemRepository.findWithClaim(itemId)
+        // INV-12 — 항목 행을 배타 잠금으로 읽는다. 이전 판정 조회와 새 판정
+        // 저장 사이에 같은 항목의 다른 요청이 끼어들면 현재 판정이 2건이
+        // 되므로, 이 지점에서 직렬화한다. 검증보다 먼저 잠그는 이유는
+        // 검증이 읽는 상태 자체가 경합 대상이기 때문이다.
+        ClaimItem item = claimItemRepository.findByIdForUpdate(itemId)
                 .orElseThrow(() -> new ResourceNotFoundException("claimItem", itemId));
         Claim claim = item.getClaim();
 

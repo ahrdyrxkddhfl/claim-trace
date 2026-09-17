@@ -15,7 +15,7 @@ spring:
     # MODE=PostgreSQL — DBML 원본이 PostgreSQL 기준이라 방언 차이를 줄인다.
     # 다만 부분 UNIQUE 인덱스(WHERE 절)는 이 모드에서도 지원되지 않는다.
     # INV-12 는 애플리케이션 레벨과 테스트로 보장한다.
-    url: jdbc:h2:mem:claimtrace;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:mem:claimtrace;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000
     driver-class-name: org.h2.Driver
     username: sa
     password:
