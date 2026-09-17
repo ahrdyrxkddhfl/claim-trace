@@ -185,6 +185,15 @@ public class ReviewService {
         // 단건 조회가 실패한다.
         Optional<Review> previous = reviewRepository.findCurrentByItemId(itemId);
 
+        // INV-12 · D-6 — 이전 판정의 현재 플래그를 '새 판정을 저장하기 전에'
+        // 내리고 즉시 반영한다. PostgreSQL 프로파일에는
+        // (claim_item_id) WHERE is_current 에 부분 UNIQUE 인덱스가 걸려 있어,
+        // 새 판정을 먼저 넣으면 그 INSERT 시점에 현재 판정이 2건이 되어
+        // 거부된다. IDENTITY 전략은 save() 호출 시점에 INSERT 를 실행하므로
+        // UPDATE 를 먼저 flush 해 두어야 한다.
+        previous.ifPresent(Review::supersede);
+        reviewRepository.flush();
+
         // 여기서부터는 실패하지 않는다. 검증은 모두 위에서 끝났다.
         Review saved = reviewRepository.save(Review.builder()
                 .claimItem(item)
@@ -197,8 +206,9 @@ public class ReviewService {
         // INV-12 · D-6 — 이전 판정은 지우지 않고 플래그만 이관한다.
         // 새 판정을 먼저 저장해야 대체 관계에 넣을 식별자가 생기므로
         // flush 로 식별자를 확정한 뒤 연결한다.
+        // 대체 관계는 새 판정의 식별자가 생긴 뒤에야 연결할 수 있다.
         reviewRepository.flush();
-        previous.ifPresent(review -> review.supersededBy(saved));
+        previous.ifPresent(review -> review.linkSuccessor(saved));
 
         InterventionResponse interventionResponse = null;
         if (isOverride) {

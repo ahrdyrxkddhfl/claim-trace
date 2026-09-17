@@ -31,7 +31,9 @@ import lombok.NoArgsConstructor;
  * 다른 곳에 둔다.
  *
  * <p>재검토 시 기존 레코드를 갱신하지 않고 새 레코드를 추가하며
- * {@code isCurrent} 를 이관한다(D-6). 이의제기로 판정이 뒤집히는 사건은
+ * {@code isCurrent} 를 이관한다(D-6). 이관은 {@link #supersede()} 와
+ * {@link #linkSuccessor(Review)} 두 단계로 나뉘는데, 그 이유는 각 메서드에
+ * 적었다. 이의제기로 판정이 뒤집히는 사건은
  * 가장 설명이 필요한 사건인데, 덮어쓰면 "최초에 왜 부지급이었는가"가
  * 소실된다. 이의제기 회신에도 그 정보가 필요하다.
  *
@@ -39,9 +41,14 @@ import lombok.NoArgsConstructor;
  * 정확히 1건이어야 한다. PostgreSQL 이라면
  * {@code CREATE UNIQUE INDEX ... WHERE is_current} 로 DB 가 강제할 수 있지만
  * H2 는 부분 유니크 인덱스를 지원하지 않는다. 본 구현에서는 판정 저장
- * 서비스가 같은 트랜잭션 안에서 이전 레코드의 플래그를 내리는 것으로
- * 보장하고, 그 보장이 실제로 성립하는지를 테스트로 확인한다. 즉 이 조건은
- * DB 가 막는 것이 아니라 서비스가 지키는 것이며, README 에도 그렇게 적는다.
+ * 서비스가 항목 행에 배타 잠금을 걸어 동시 요청을 직렬화하는 것으로
+ * 보장하고, 그 보장이 실제로 성립하는지를 테스트로 확인한다.
+ *
+ * <p>PostgreSQL 프로파일에서는 사정이 다르다.
+ * {@code CREATE UNIQUE INDEX ... WHERE is_current} 로 DB 가 직접 강제하므로,
+ * 애플리케이션의 잠금을 우회하더라도 두 번째 현재 판정은 저장되지 않는다.
+ * 같은 불변조건을 두 층에서 지키는 셈이고, 어느 층이 무엇을 보장하는지는
+ * README 에 구분해 적는다.
  *
  * <p>{@code paidAmount} 를 판정과 별도 컬럼으로 두는 이유는 {@code PARTIAL}
  * 때문이다. 일부지급이라는 판정만으로는 얼마를 지급하는지 알 수 없다.
@@ -132,16 +139,34 @@ public class Review {
     }
 
     /**
-     * 이 판정을 새 판정으로 대체한다.
+     * 현재 판정 플래그를 내린다.
      *
-     * <p>현재 판정 플래그를 내리고 대체 판정을 연결한다. 호출 순서상 새
-     * 판정이 먼저 저장되어 식별자를 가진 뒤에 이 메서드를 부른다. 반대
-     * 순서로는 연결할 대상의 식별자가 아직 없다.
+     * <p><b>대체 판정 연결과 분리한 이유는 DB 제약 때문이다.</b> PostgreSQL
+     * 프로파일에서는 {@code (claim_item_id) WHERE is_current} 에 부분 UNIQUE
+     * 인덱스가 걸린다. 새 판정을 먼저 저장하면 그 INSERT 시점에 현재 판정이
+     * 잠깐 2건이 되어 인덱스가 이를 거부한다. 따라서 이전 판정의 플래그를
+     * 먼저 내려 반영한 뒤에야 새 판정을 저장할 수 있다.
+     *
+     * <p>그런데 {@code superseded_by} 에 넣을 새 판정의 식별자는 저장 후에야
+     * 생긴다. 한 메서드로 두 변경을 함께 할 수 없는 것이 여기서 온다.
+     * 두 호출 사이의 중간 상태는 같은 트랜잭션 안에만 존재하며, 판정 저장
+     * 서비스가 둘을 반드시 함께 수행한다.
+     *
+     * @see #linkSuccessor(Review)
+     */
+    public void supersede() {
+        this.isCurrent = false;
+    }
+
+    /**
+     * 이 판정을 대체한 판정을 연결한다.
+     *
+     * <p>{@link #supersede()} 로 플래그를 내린 뒤, 새 판정이 저장되어 식별자를
+     * 가진 시점에 호출한다.
      *
      * @param newer 이 판정을 대체하는 새 판정
      */
-    public void supersededBy(Review newer) {
-        this.isCurrent = false;
+    public void linkSuccessor(Review newer) {
         this.supersededBy = newer;
     }
 }
