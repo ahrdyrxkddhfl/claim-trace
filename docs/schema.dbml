@@ -1,0 +1,469 @@
+// =============================================================
+// CLAIM-TRACE
+// 보험금 지급심사 근거 추적 및 인적 개입 기록 시스템
+//
+// SKALA AI 웹 서비스 설계 Mini-project · 판교캠퍼스 3반
+// dbdiagram.io 에서 렌더링
+//
+// 설계 원칙
+//   1. 고아 엔터티 금지 — 모든 테이블은 최소 하나의 화면에서 사용된다
+//   2. 상태 전이는 사람만 일으킨다 — 모든 상태 변경에 행위자 FK가 붙는다
+//   3. 기록은 지우지 않는다 — 기각된 근거, 뒤집힌 권고, 이전 판정 모두 남는다
+//   4. 노출 수준은 데이터에 새긴다 — 애플리케이션 로직이 아니라 컬럼으로 표현한다
+// =============================================================
+
+
+// ─────────────────────────────────────────────
+// Enum
+// ─────────────────────────────────────────────
+
+Enum user_role {
+  REVIEWER        [note: '심사자']
+  REVIEW_MANAGER  [note: '심사관리자']
+}
+
+Enum claim_status {
+  RECEIVED      [note: '접수']
+  UNDER_REVIEW  [note: '심사중']
+  DECIDED       [note: '판정 확정']
+  OBJECTION     [note: '이의제기 접수']
+  CLOSED        [note: '종결']
+}
+
+Enum item_decision {
+  PAY      [note: '지급']
+  PARTIAL  [note: '일부지급']
+  DENY     [note: '부지급']
+}
+
+Enum evidence_source {
+  AI      [note: '모델 기여도 기반']
+  RULE    [note: '심사 룰 매칭']
+  MANUAL  [note: '심사자 직접 추가']
+}
+
+Enum evidence_status {
+  GENERATED  [note: '생성 · 미검토']
+  ADOPTED    [note: '채택']
+  REJECTED   [note: '기각']
+}
+
+Enum polarity {
+  POSITIVE  [note: '지급 방향']
+  NEGATIVE  [note: '보상제외 방향']
+}
+
+Enum disclosure_level {
+  INTERNAL  [note: '내부용 · 고객 설명문 제외']
+  CUSTOMER  [note: '고객용']
+}
+
+Enum rejection_reason_type {
+  RULE_MISAPPLIED       [note: '룰 오적용']
+  DOCUMENT_MISMATCH     [note: '서류 확인 결과 상이']
+  TERMS_INTERPRETATION  [note: '약관 해석 상이']
+  DUPLICATE             [note: '중복 근거']
+  OTHER                 [note: '기타']
+}
+
+Enum intervention_type {
+  OVERRIDE    [note: 'AI 권고 미채택']
+  DUAL_CHECK  [note: '복수인 확인']
+  ESCALATION  [note: '차상위 검토']
+}
+
+Enum override_reason_type {
+  DOCUMENT_MISMATCH     [note: '서류 확인 결과 상이']
+  TERMS_INTERPRETATION  [note: '약관 해석 상이']
+  MODEL_FALSE_POSITIVE  [note: '모델 오탐 판단']
+  OTHER                 [note: '기타']
+}
+
+Enum explanation_type {
+  GLOBAL  [note: '전역 설명 · 모델별 사전 생성']
+  LOCAL   [note: '국소 설명 · 청구별 생성']
+}
+
+Enum explanation_status {
+  REQUESTED   [note: '신청 접수']
+  GENERATING  [note: '작성중']
+  PROVIDED    [note: '발급 완료']
+  OVERDUE     [note: '기한 초과']
+}
+
+Enum objection_status {
+  RECEIVED   [note: '접수']
+  REVIEWING  [note: '재검토중']
+  ANSWERED   [note: '회신 완료']
+}
+
+Enum coverage_type {
+  DISEASE_COVERED     [note: '질병 급여']
+  DISEASE_UNCOVERED   [note: '질병 비급여']
+  INJURY_COVERED      [note: '상해 급여']
+  INJURY_UNCOVERED    [note: '상해 비급여']
+}
+
+Enum document_type {
+  RECEIPT        [note: '진료비계산서·영수증']
+  DETAIL         [note: '진료비세부내역서']
+  CONFIRMATION   [note: '진료확인서']
+  OPINION        [note: '의사 소견서']
+  OTHER          [note: '기타']
+}
+
+// ─────────────────────────────────────────────
+// 계약 · 사용자
+// ─────────────────────────────────────────────
+
+Table customers {
+  id            bigint       [pk, increment]
+  login_id      varchar(50)  [not null, unique, note: '포털 로그인 아이디']
+  password_hash varchar(255) [not null]
+  name          varchar(50)  [not null]
+  birth_year    smallint     [not null]
+  phone         varchar(20)  [not null]
+  created_at    timestamp    [not null, default: `now()`]
+
+  Note: '청구인. 화면 1,2,3,4,5,6'
+}
+
+Table policies {
+  id           bigint       [pk, increment]
+  customer_id  bigint       [not null, ref: > customers.id]
+  policy_no    varchar(30)  [not null, unique, note: '증권번호']
+  product_name varchar(100) [not null]
+  started_on   date         [not null]
+  ended_on     date         [note: 'null 이면 유지 중']
+  created_at   timestamp    [not null, default: `now()`]
+
+  Note: '보험 계약. 화면 3,4,9'
+}
+
+Table coverages {
+  id             bigint        [pk, increment]
+  policy_id      bigint        [not null, ref: > policies.id]
+  name           varchar(100)  [not null, note: '담보·특약명']
+  type           coverage_type [not null]
+  limit_amount   int           [not null, note: '1회당 한도 (원)']
+  annual_limit   int           [note: '연간 횟수 한도']
+  deductible_rate decimal(4,3) [not null, default: 0, note: '자기부담률 0.000~1.000']
+  exemption_until date         [note: '면책기간 종료일']
+
+  Note: '담보·특약. 화면 3,9,10'
+  Indexes { (policy_id, type) }
+}
+
+Table users {
+  id            bigint       [pk, increment]
+  emp_no        varchar(20)  [not null, unique, note: '사번']
+  password_hash varchar(255) [not null]
+  name          varchar(50)  [not null]
+  role          user_role    [not null]
+  active        boolean      [not null, default: true]
+  created_at    timestamp    [not null, default: `now()`]
+
+  Note: '사내 사용자. 심사자와 심사관리자. 화면 7~14'
+}
+
+// ─────────────────────────────────────────────
+// 청구
+// ─────────────────────────────────────────────
+
+Table claims {
+  id            bigint       [pk, increment]
+  claim_no      varchar(30)  [not null, unique, note: 'CLM-YYYY-MMDD-NNNNN']
+  customer_id   bigint       [not null, ref: > customers.id]
+  policy_id     bigint       [not null, ref: > policies.id]
+  status        claim_status [not null, default: 'RECEIVED']
+  hospital_name varchar(100) [not null]
+  diagnosis_code varchar(10) [not null, note: 'KCD 상병코드']
+  treated_from  date         [not null]
+  treated_to    date         [not null]
+  customer_memo text         [note: '청구인 추가 기재사항']
+  assignee_id   bigint       [ref: > users.id, note: '배정 심사자. 자동처리 건은 null']
+  assigned_at   timestamp
+  received_at   timestamp    [not null, default: `now()`]
+  decided_at    timestamp    [note: '판정 확정 시각']
+
+  Note: '청구 건. 화면 2,3,4,6,8,9,13'
+  Indexes {
+    (assignee_id, status) [note: '화면 8 심사 큐 조회']
+    (customer_id, received_at)
+  }
+}
+
+Table claim_items {
+  id              bigint  [pk, increment]
+  claim_id        bigint  [not null, ref: > claims.id]
+  coverage_id     bigint  [not null, ref: > coverages.id]
+  seq             smallint [not null, note: '청구 내 항목 순번']
+  name            varchar(100) [not null, note: '진료 항목명']
+  procedure_code  varchar(20)  [note: '행위 코드']
+  is_covered      boolean [not null, note: 'true 급여 / false 비급여']
+  quantity        smallint [not null, default: 1, note: '회차']
+  claimed_amount  int     [not null, note: '청구금액 (원)']
+  source_document_id bigint [ref: > documents.id, note: 'OCR 추출 원본 서류']
+  created_at      timestamp [not null, default: `now()`]
+
+  Note: '''
+  청구 항목. 항목별 판정 단위.
+  OCR 결과 수신 시 시스템이 생성하고, 배당된 건은 심사자가 화면 9에서 확인·보정한다 (D-8).
+  화면 3(생성),4,9,10
+  '''
+  Indexes { (claim_id, seq) [unique] }
+}
+
+Table documents {
+  id           bigint        [pk, increment]
+  claim_id     bigint        [not null, ref: > claims.id]
+  type         document_type [not null]
+  name         varchar(255)  [not null, note: '원본 파일명']
+  file_url     varchar(500)  [not null]
+  size_bytes   int           [not null]
+  ocr_status   varchar(20)   [not null, default: 'PENDING', note: 'PENDING / DONE / FAILED']
+  ocr_result   json          [note: 'OCR 추출 결과 원문']
+  uploaded_at  timestamp     [not null, default: `now()`]
+  ocr_done_at  timestamp
+
+  Note: '제출 서류 및 OCR 결과. 화면 3,9,10'
+  Indexes { (claim_id, type) }
+}
+
+// ─────────────────────────────────────────────
+// 근거 · AI 권고 · 판정
+// ─────────────────────────────────────────────
+
+Table rules {
+  id            bigint    [pk, increment]
+  code          varchar(20) [not null, note: 'R-NNNN. 버전 간 공통']
+  version       smallint  [not null, default: 1]
+  name          varchar(100) [not null]
+  coverage_type coverage_type [not null]
+  article_no    varchar(50)  [not null, note: '약관 조항. 예 제12조 3항']
+  article_text  text         [not null, note: '조항 원문']
+  polarity      polarity     [not null]
+  condition_expr text        [not null, note: '적용 조건식']
+  content_internal text      [not null, note: '심사자용 근거 문구']
+  content_customer text      [not null, note: '고객 설명문용 문구']
+  default_disclosure_level disclosure_level [not null, default: 'CUSTOMER']
+  active        boolean   [not null, default: true]
+  author_id     bigint    [not null, ref: > users.id]
+  change_note   varchar(255) [note: '해당 버전의 변경 내용']
+  created_at    timestamp [not null, default: `now()`]
+
+  Note: '''
+  심사 룰·약관 조항. 버전 단위로 보존된다.
+  수정 시 새 레코드가 생성되며 이전 버전은 삭제되지 않는다 (설계 원칙 3).
+  화면 10(참조),14
+  '''
+  Indexes {
+    (code, version) [unique]
+    (coverage_type, active)
+  }
+}
+
+Table ai_recommendations {
+  id                    bigint        [pk, increment]
+  claim_item_id         bigint        [not null, ref: > claim_items.id]
+  model_name            varchar(50)   [not null, note: '예 claim-risk']
+  model_version         varchar(20)   [not null, note: '예 v2.3']
+  exclusion_probability decimal(4,3)  [not null, note: '보상제외 확률 0.000~1.000']
+  recommendation        item_decision [not null, note: '확률과 임계값으로 산출된 권고']
+  threshold             decimal(4,3)  [not null, note: '산출 시점의 자동처리 임계값']
+  is_latest             boolean       [not null, default: true]
+  created_at            timestamp     [not null, default: `now()`]
+
+  Note: '''
+  AI의 항목별 권고. 모델 버전이 바뀌면 복수 레코드가 쌓인다.
+  reviews 와 물리적으로 분리해 "누가 결정했는가"를 보존한다 (D-1).
+  화면 9,10,13
+  '''
+  Indexes {
+    (claim_item_id, is_latest)
+    (claim_item_id, created_at)
+  }
+}
+
+Table evidences {
+  id               bigint          [pk, increment]
+  claim_item_id    bigint          [not null, ref: > claim_items.id]
+  rule_id          bigint          [ref: > rules.id, note: 'source=RULE 인 경우. 버전까지 고정된 FK']
+  ai_recommendation_id bigint      [ref: > ai_recommendations.id, note: 'source=AI 인 경우']
+  document_id      bigint          [ref: > documents.id, note: '근거가 된 서류']
+  source           evidence_source [not null]
+  polarity         polarity        [not null]
+  status           evidence_status [not null, default: 'GENERATED']
+  disclosure_level disclosure_level [not null, note: 'RULE 기본 CUSTOMER, AI 기본 INTERNAL (D-4)']
+  content_internal text            [not null, note: '심사자에게 보이는 근거 문구']
+  content_customer text            [note: '고객 설명문용 문구. INTERNAL 이면 null 가능']
+  contribution     decimal(5,3)    [note: 'source=AI 인 경우 새플리 기여도']
+  target_amount    int             [note: '이 근거가 영향을 주는 금액 (원)']
+  rejection_reason_type rejection_reason_type [note: 'status=REJECTED 인 경우 필수 (INV-11)']
+  rejection_note   text            [note: '기각 상세 사유. 선택']
+  decided_by       bigint          [ref: > users.id, note: '채택·기각을 수행한 심사자']
+  decided_at       timestamp
+  created_at       timestamp       [not null, default: `now()`]
+
+  Note: '''
+  근거. claim_items × rules 교차 엔터티이자 속성을 가진 실체 (D-2).
+  기각된 근거도 사유와 함께 보존한다 (D-3).
+  rule_id 는 rules(code, version) 중 특정 버전을 가리키므로, 룰을 수정해도 과거 근거는 변하지 않는다.
+  화면 4,9,10,11
+  '''
+  Indexes {
+    (claim_item_id, status)
+    (claim_item_id, disclosure_level)
+    (rule_id, status) [note: '화면 14 룰별 기각률 집계']
+  }
+}
+
+Table reviews {
+  id                bigint        [pk, increment]
+  claim_item_id     bigint        [not null, ref: > claim_items.id]
+  reviewer_id       bigint        [not null, ref: > users.id, note: 'INV-1']
+  decision          item_decision [not null]
+  paid_amount       int           [not null, default: 0, note: '지급 결정액 (원)']
+  reason            text          [not null, note: '판정 사유. 필수 (INV-2)']
+  is_current        boolean       [not null, default: true]
+  superseded_by     bigint        [ref: > reviews.id, note: '이 판정을 대체한 판정']
+  decided_at        timestamp     [not null, default: `now()`]
+
+  Note: '''
+  사람의 항목별 판정 이력.
+  재검토 시 기존 레코드를 갱신하지 않고 새 레코드를 추가하며 is_current 를 이관한다 (D-6).
+  항목당 is_current=true 인 레코드는 정확히 1건 (INV-12).
+  화면 4,9,13
+  '''
+  Indexes {
+    (claim_item_id, is_current) [unique, note: 'PostgreSQL 부분 유니크: WHERE is_current']
+    (reviewer_id, decided_at)
+  }
+}
+
+// ─────────────────────────────────────────────
+// 인적 개입
+// ─────────────────────────────────────────────
+
+Table interventions {
+  id                   bigint            [pk, increment]
+  claim_item_id        bigint            [ref: > claim_items.id, note: 'OVERRIDE 인 경우']
+  claim_id             bigint            [not null, ref: > claims.id]
+  review_id            bigint            [ref: > reviews.id, note: '이 개입을 발생시킨 판정']
+  ai_recommendation_id bigint            [ref: > ai_recommendations.id, note: '뒤집힌 권고 (D-1)']
+  rule_id              bigint            [ref: > intervention_rules.id, note: '발동 규칙']
+  type                 intervention_type [not null]
+  override_reason_type override_reason_type [note: 'type=OVERRIDE 인 경우 필수 (INV-3)']
+  reason               text              [not null, note: '개입 사유. 필수 (INV-3, 보조수단성 ⑧)']
+  actor_id             bigint            [not null, ref: > users.id, note: 'INV-1']
+  approved             boolean           [note: 'DUAL_CHECK 인 경우 승인 여부']
+  approved_by          bigint            [ref: > users.id, note: '승인·반려 수행자 (INV-1). 구현 중 추가']
+  approved_at          timestamp         [note: '승인·반려 시각. 구현 중 추가']
+  approval_note        text              [note: '승인·반려 사유. 반려 시 기재 권장. 구현 중 추가']
+  occurred_at          timestamp         [not null, default: `now()`]
+
+  Note: '''
+  인적 개입 이력.
+  판정 저장과 같은 트랜잭션에서 시스템이 생성한다. 심사자가 별도로 선언하지 않는다 (D-7).
+
+  approved_by · approved_at · approval_note 는 구현 중에 추가했다.
+  최초 설계에는 approved 불리언만 있어 승인이라는 상태 전이의 행위자가
+  기록되지 않았다. INV-1 과 충돌하며, 직무 분리를 검사하고도 그 검사를
+  통과한 사람을 남기지 않아 사후에 "누가 풀어줬는가"에 답할 수 없다.
+  actor_id 는 개입을 발생시킨 심사자이지 승인자가 아니다.
+
+  화면 9,13
+  '''
+  Indexes {
+    (claim_id, type)
+    (actor_id, occurred_at)
+    (rule_id, occurred_at)
+  }
+}
+
+Table intervention_rules {
+  id                    bigint            [pk, increment]
+  code                  varchar(10)       [not null, unique, note: 'P-NN']
+  name                  varchar(100)      [not null]
+  conditions            json              [not null, note: '발동 조건 배열. 모든 조건 AND 결합']
+  required_intervention intervention_type [not null, note: 'DUAL_CHECK 또는 ESCALATION']
+  approver_roles        json              [not null, note: '승인 가능 역할 배열']
+  active                boolean           [not null, default: true]
+  author_id             bigint            [not null, ref: > users.id]
+  created_at            timestamp         [not null, default: `now()`]
+  updated_at            timestamp
+
+  Note: '''
+  인적 개입 규칙. 조건을 코드가 아니라 데이터로 둔다 (D-5).
+  보조수단성 점검항목 ⑤ "인적 개입 방식을 적용하는 기준의 문서화"에 대응한다.
+  화면 12,13
+  '''
+}
+
+// ─────────────────────────────────────────────
+// 설명 · 이의제기
+// ─────────────────────────────────────────────
+
+Table explanations {
+  id            bigint             [pk, increment]
+  claim_id      bigint             [ref: > claims.id, note: 'LOCAL 인 경우. GLOBAL 은 null']
+  type          explanation_type   [not null]
+  status        explanation_status [not null, default: 'REQUESTED']
+  model_name    varchar(50)        [note: 'GLOBAL 인 경우 대상 모델']
+  body          text               [note: '설명문 본문. 초안 생성 후 심사자가 확정']
+  file_url      varchar(500)       [note: '발급 파일']
+  drafted_by    bigint             [ref: > users.id, note: '초안 확정 심사자']
+  requested_at  timestamp          [not null, default: `now()`]
+  due_date      date               [note: 'LOCAL 인 경우 필수 (INV-8)']
+  provided_at   timestamp
+
+  Note: '''
+  설명서. 전역 설명은 모델별 사전 생성, 국소 설명은 청구별 신청 생성.
+  국소 설명에는 제공 기한이 반드시 존재한다 (INV-8).
+  화면 4,5,11
+  '''
+  Indexes { (claim_id, type) }
+}
+
+Table objections {
+  id            bigint           [pk, increment]
+  claim_id      bigint           [not null, ref: > claims.id]
+  target_items  json             [not null, note: '대상 claim_item id 배열']
+  reason        text             [not null, note: '청구인이 작성한 이의 사유']
+  status        objection_status [not null, default: 'RECEIVED']
+  reviewer_id   bigint           [ref: > users.id, note: '재검토 심사자. 최초 판정자와 달라야 함']
+  response      text             [note: '재검토 결과 회신']
+  received_at   timestamp        [not null, default: `now()`]
+  answered_at   timestamp
+
+  Note: '''
+  이의제기. 재검토 결과는 reviews 에 새 레코드로 저장되고 최초 판정은 이력으로 보존된다.
+  화면 4,6,9
+  '''
+  Indexes { (claim_id, status) }
+}
+
+
+// =============================================================
+// 불변조건과 스키마의 대응
+//
+// INV-1  reviews.reviewer_id / interventions.actor_id  NOT NULL
+// INV-2  reviews.reason                                NOT NULL
+// INV-3  interventions.reason NOT NULL
+//        + 판정 저장 시 ai_recommendations 비교 후 앱 레벨 검증
+// INV-4  intervention_rules 평가 + interventions.approved  (앱 레벨)
+// INV-5  evidences.polarity = NEGATIVE 카운트              (앱 레벨)
+// INV-6  claims.assignee_id / claims.customer_id 소유권 검사 (앱 레벨)
+// INV-7  claims.status = DECIDED 인 경우 evidences 수정 차단 (앱 레벨)
+// INV-8  explanations.due_date  (type = LOCAL 인 경우 NOT NULL)
+// INV-9  evidences.disclosure_level 로 고객 응답 필터링
+// INV-10 미판정 claim_items 존재 여부 검사               (앱 레벨)
+// INV-11 evidences.rejection_reason_type (status = REJECTED 인 경우 NOT NULL)
+// INV-12 reviews (claim_item_id) WHERE is_current  부분 UNIQUE 인덱스
+// INV-13 External 엔드포인트의 쓰기 대상 제한            (앱 레벨)
+//
+// 앱 레벨 검증은 세 개의 단일 진입점에 모은다.
+//   판정 저장 서비스   POST /claim-items/{itemId}/reviews
+//   판정 확정 서비스   POST /claims/{claimId}/decision
+//   설명서 생성 서비스 POST /claims/{claimId}/explanations/draft
+// =============================================================
