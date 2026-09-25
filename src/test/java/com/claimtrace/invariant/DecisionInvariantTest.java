@@ -5,12 +5,14 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.claimtrace.domain.Intervention;
 import com.claimtrace.domain.InterventionApproval;
 import com.claimtrace.repository.InterventionApprovalRepository;
 import com.claimtrace.repository.InterventionRepository;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -33,6 +35,9 @@ class DecisionInvariantTest extends InvariantTestSupport {
 
     @Autowired
     private InterventionApprovalRepository interventionApprovalRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     @DisplayName("INV-10 미판정 항목이 남으면 확정할 수 없다")
@@ -199,6 +204,41 @@ class DecisionInvariantTest extends InvariantTestSupport {
                 .andExpect(jsonPath("$.status").value("DECIDED"))
                 .andExpect(jsonPath("$.overrideCount").value(1))
                 .andExpect(jsonPath("$.paidTotal").value(19200 + 240000 + 210000 + 144000));
+    }
+
+    @Test
+    @DisplayName("판정 뒤에 도착한 권고는 확정 전에 평가되지 않는다")
+    void 판정_뒤에_도착한_권고는_확정_전에_평가되지_않는다() throws Exception {
+        // 판정을 저장하는 시점에는 도수치료의 권고가 아직 없다. 모델이
+        // 재처리 중인 상태를 흉내 낸다. 권고를 넣고 내리는 경로가 구현
+        // 범위에 없어 여기서는 직접 조작한다.
+        jdbcTemplate.update(
+                "UPDATE ai_recommendations SET is_latest = FALSE WHERE claim_item_id = ?",
+                ITEM_MANUAL_THERAPY);
+
+        // 규칙 평가는 이 시점에만 일어난다. 도수치료의 확률 0.82 는
+        // P-03(확률 0.8 이상)의 유일한 발동 근거인데 지금은 보이지 않으므로
+        // P-03 은 기록되지 않는다. 비급여 고액이라는 다른 근거가 있는 P-07 만
+        // 남는다.
+        reviewAllItemsFollowingAi();
+
+        // 권고가 뒤늦게 도착한다. 확률 0.82 가 다시 최신이 되었고, 이 값이면
+        // P-03 이 발동해야 한다.
+        jdbcTemplate.update(
+                "UPDATE ai_recommendations SET is_latest = TRUE WHERE claim_item_id = ?",
+                ITEM_MANUAL_THERAPY);
+
+        // 그러나 확정은 규칙을 다시 평가하지 않고 판정 당시 기록된 개입만
+        // 본다. 그래서 P-03 은 평가된 적 없는 채로 남고 P-07 만 확정을 막는다.
+        //
+        // 이 단언은 개선된 동작이 아니라 현재 구현의 한계를 고정한 것이다.
+        // README 11 장의 조치(규칙 버전 고정 → 확정 시점 재평가 → 트랜잭션
+        // 분리)가 들어오면 기대값을 "P-07", "P-03" 으로 바꾼다.
+        decide(CLAIM_IN_REVIEW, REVIEWER)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("DUAL_CHECK_REQUIRED"))
+                .andExpect(jsonPath("$.invariant").value("INV-4"))
+                .andExpect(jsonPath("$.details.ruleCodes", containsInAnyOrder("P-07")));
     }
 
     @Test
