@@ -1,8 +1,20 @@
 package com.claimtrace.invariant;
 
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
+import com.claimtrace.domain.Intervention;
+import com.claimtrace.domain.InterventionApproval;
+import com.claimtrace.repository.InterventionApprovalRepository;
+import com.claimtrace.repository.InterventionRepository;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,6 +27,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @DisplayName("판정 확정 — 불변조건")
 class DecisionInvariantTest extends InvariantTestSupport {
+
+    @Autowired
+    private InterventionRepository interventionRepository;
+
+    @Autowired
+    private InterventionApprovalRepository interventionApprovalRepository;
 
     @Test
     @DisplayName("INV-10 미판정 항목이 남으면 확정할 수 없다")
@@ -99,6 +117,59 @@ class DecisionInvariantTest extends InvariantTestSupport {
         decide(CLAIM_IN_REVIEW, REVIEWER)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.invariant").value("INV-4"));
+    }
+
+    @Test
+    @DisplayName("반려한 뒤 승인해도 반려 이력이 순서대로 남는다")
+    void 반려한_뒤_승인해도_반려_이력이_순서대로_남는다() throws Exception {
+        reviewAllItemsFollowingAi();
+
+        // 심사관리자가 먼저 반려한다. 서류가 부족하다는 판단이다.
+        resolveDualCheck(CLAIM_IN_REVIEW, MANAGER, """
+                {"approved":false,"note":"추가 서류 확인이 필요하다."}
+                """)
+                .andExpect(status().isOk());
+
+        // 반려된 개입은 blocksDecision() 이 참이라 승인 대기 목록에 그대로 남는다.
+        // 보완 서류가 들어와 같은 엔드포인트로 승인하면 통과한다. 이 두 번째
+        // 호출이 개입의 현재 상태를 덮어쓰는 지점이다.
+        resolveDualCheck(CLAIM_IN_REVIEW, MANAGER, """
+                {"approved":true,"note":"보완 서류를 확인해 승인한다."}
+                """)
+                .andExpect(status().isOk())
+                // 이력 조회 엔드포인트가 없으므로 승인 응답에 실어 보낸다.
+                .andExpect(jsonPath("$[0].approvals.length()").value(2))
+                .andExpect(jsonPath("$[0].approvals[0].approved").value(false))
+                .andExpect(jsonPath("$[0].approvals[0].note").value("추가 서류 확인이 필요하다."))
+                .andExpect(jsonPath("$[0].approvals[1].approved").value(true))
+                .andExpect(jsonPath("$[0].approvals[1].note").value("보완 서류를 확인해 승인한다."));
+
+        // 판정은 대체되어도 이전 판정이 이력으로 남는다(D-6). 통제 승인도
+        // "누가 무엇을 근거로 결정했는가"의 일부이므로 같은 보존이 필요하다.
+        // 보조수단성 ⑧이 요구하는 것은 개입 사실의 기록이 아니라 그 내용의
+        // 기록이므로, 반려 사유가 사라지면 통제가 성립하지 않는다.
+        List<Intervention> interventions = interventionRepository.findAllByClaimId(CLAIM_IN_REVIEW);
+        assertFalse(interventions.isEmpty(), "규칙이 발동해 개입이 기록되어 있어야 한다");
+
+        for (Intervention intervention : interventions) {
+            List<InterventionApproval> history = interventionApprovalRepository
+                    .findAllByInterventionIds(List.of(intervention.getId()));
+
+            assertEquals(2, history.size(),
+                    "개입 " + intervention.getId() + " 의 처리 이력은 반려와 승인 두 건이어야 한다");
+
+            InterventionApproval rejection = history.get(0);
+            assertFalse(rejection.isApproved(), "첫 처리는 반려로 남아야 한다");
+            assertEquals("추가 서류 확인이 필요하다.", rejection.getNote(), "반려 사유가 남아야 한다");
+            assertEquals(MANAGER, rejection.getApprover().getId(), "반려한 행위자가 남아야 한다");
+            assertNotNull(rejection.getApprovedAt(), "반려 시각이 남아야 한다");
+
+            InterventionApproval approval = history.get(1);
+            assertTrue(approval.isApproved(), "두 번째 처리는 승인으로 남아야 한다");
+            assertEquals("보완 서류를 확인해 승인한다.", approval.getNote(), "승인 사유가 남아야 한다");
+            assertEquals(MANAGER, approval.getApprover().getId(), "승인한 행위자가 남아야 한다");
+            assertNotNull(approval.getApprovedAt(), "승인 시각이 남아야 한다");
+        }
     }
 
     @Test

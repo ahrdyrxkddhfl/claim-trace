@@ -2,8 +2,10 @@ package com.claimtrace.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import com.claimtrace.domain.Intervention;
+import com.claimtrace.domain.InterventionApproval;
 import com.claimtrace.domain.enums.ItemDecision;
 import com.claimtrace.domain.enums.InterventionType;
 import com.claimtrace.domain.enums.OverrideReasonType;
@@ -31,6 +33,7 @@ import com.claimtrace.domain.enums.OverrideReasonType;
  * @param ruleCode 발동 규칙 코드. 규칙 발동이 아니면 {@code null}
  * @param recommendation 뒤집힌 AI 권고. 오버라이드가 아니면 {@code null}
  * @param occurredAt 발생 시각
+ * @param approvals 승인·반려 처리 이력. 처리 순서대로이며, 처리 전이면 빈 목록
  */
 public record InterventionResponse(
         Long id,
@@ -47,7 +50,8 @@ public record InterventionResponse(
         String approvalNote,
         String ruleCode,
         RecommendationSnapshot recommendation,
-        LocalDateTime occurredAt) {
+        LocalDateTime occurredAt,
+        List<ApprovalRecord> approvals) {
 
     /**
      * 뒤집힌 AI 권고의 요약.
@@ -56,6 +60,39 @@ public record InterventionResponse(
      * @param exclusionProbability 산출된 보상제외 확률
      */
     public record RecommendationSnapshot(ItemDecision decision, BigDecimal exclusionProbability) {
+    }
+
+    /**
+     * 처리 이력 한 건.
+     *
+     * <p>조회 엔드포인트를 따로 두지 않고 이 응답에 실어 보낸다. 이력이
+     * 저장만 되고 어디에서도 보이지 않으면, 반려 사유를 남긴다는 목적이
+     * 절반만 달성된다.
+     *
+     * @param approved 승인이면 {@code true}, 반려이면 {@code false}
+     * @param approvedBy 처리를 수행한 사용자 성명
+     * @param approvedAt 처리 시각
+     * @param note 처리 사유. 없으면 {@code null}
+     */
+    public record ApprovalRecord(
+            boolean approved,
+            String approvedBy,
+            LocalDateTime approvedAt,
+            String note) {
+
+        /**
+         * 이력 엔티티를 응답으로 변환한다.
+         *
+         * @param approval 변환할 처리 이력
+         * @return 처리 이력 응답
+         */
+        public static ApprovalRecord from(InterventionApproval approval) {
+            return new ApprovalRecord(
+                    approval.isApproved(),
+                    approval.getApprover().getName(),
+                    approval.getApprovedAt(),
+                    approval.getNote());
+        }
     }
 
     /**
@@ -68,6 +105,20 @@ public record InterventionResponse(
      * @return 개입 응답. 인자가 {@code null} 이면 {@code null}
      */
     public static InterventionResponse from(Intervention intervention) {
+        return from(intervention, List.of());
+    }
+
+    /**
+     * 처리 이력을 함께 실어 응답으로 변환한다.
+     *
+     * <p>오버라이드는 승인 대상이 아니므로 이력이 비어 있는 것이 정상이다.
+     *
+     * @param intervention 변환할 개입 기록
+     * @param approvals 이 개입의 처리 이력. 처리 순서대로 넘긴다
+     * @return 개입 응답. 첫 인자가 {@code null} 이면 {@code null}
+     */
+    public static InterventionResponse from(Intervention intervention,
+                                            List<InterventionApproval> approvals) {
         if (intervention == null) {
             return null;
         }
@@ -93,6 +144,7 @@ public record InterventionResponse(
                 intervention.getInterventionRule() == null
                         ? null : intervention.getInterventionRule().getCode(),
                 snapshot,
-                intervention.getOccurredAt());
+                intervention.getOccurredAt(),
+                approvals.stream().map(ApprovalRecord::from).toList());
     }
 }

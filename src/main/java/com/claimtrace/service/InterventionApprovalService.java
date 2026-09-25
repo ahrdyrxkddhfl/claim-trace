@@ -1,14 +1,17 @@
 package com.claimtrace.service;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.claimtrace.domain.Claim;
 import com.claimtrace.domain.Intervention;
+import com.claimtrace.domain.InterventionApproval;
 import com.claimtrace.domain.InterventionRule;
 import com.claimtrace.domain.Review;
 import com.claimtrace.domain.User;
@@ -18,6 +21,7 @@ import com.claimtrace.exception.ErrorCode;
 import com.claimtrace.exception.InvariantViolationException;
 import com.claimtrace.exception.ResourceNotFoundException;
 import com.claimtrace.repository.ClaimRepository;
+import com.claimtrace.repository.InterventionApprovalRepository;
 import com.claimtrace.repository.InterventionRepository;
 import com.claimtrace.repository.ReviewRepository;
 
@@ -45,6 +49,15 @@ import com.claimtrace.repository.ReviewRepository;
  * 직무 분리를 검사해 놓고 그 검사를 통과한 사람을 기록하지 않으면,
  * 사후에 "이 건은 누가 풀어줬는가"에 답할 수 없어 통제가 성립하지 않는다.
  *
+ * <p><b>처리는 이력으로 쌓인다.</b> 승인·반려는 {@link Intervention} 의
+ * 현재 상태를 갱신하면서, 같은 트랜잭션에서
+ * {@link InterventionApproval} 행을 하나 더한다. 반려된 개입은
+ * {@code blocksDecision()} 이 참으로 남아 같은 엔드포인트로 다시 승인할 수
+ * 있는데, 이력이 없던 때에는 그 순간 반려 사유와 반려자가 사라졌다.
+ * 개입은 "규칙이 요구한 사실" 한 건이고 승인·반려는 그 요구에 대한 처리라
+ * 요구 1건에 처리 N건이 맞다. 두 쓰기가 한 트랜잭션에 있으므로 현재
+ * 상태만 바뀌고 이력이 빠지는 상태는 만들어지지 않는다.
+ *
  * <p><b>명세와의 차이</b> — OpenAPI 명세는 이 엔드포인트가 개입 하나를
  * 반환하도록 정의했다. 그러나 한 청구에 여러 규칙이 동시에 발동할 수 있고,
  * 시드의 청구가 실제로 {@code P-07} 과 {@code P-03} 두 규칙에 걸린다.
@@ -57,6 +70,7 @@ public class InterventionApprovalService {
 
     private final ClaimRepository claimRepository;
     private final InterventionRepository interventionRepository;
+    private final InterventionApprovalRepository interventionApprovalRepository;
     private final ReviewRepository reviewRepository;
     private final RuleEvaluator ruleEvaluator;
 
@@ -65,15 +79,18 @@ public class InterventionApprovalService {
      *
      * @param claimRepository 청구 조회
      * @param interventionRepository 개입 이력 조회
+     * @param interventionApprovalRepository 처리 이력 기록·조회
      * @param reviewRepository 현재 판정 조회. 직무 분리 검사에 쓴다
      * @param ruleEvaluator 승인 권한 판별
      */
     public InterventionApprovalService(ClaimRepository claimRepository,
                                        InterventionRepository interventionRepository,
+                                       InterventionApprovalRepository interventionApprovalRepository,
                                        ReviewRepository reviewRepository,
                                        RuleEvaluator ruleEvaluator) {
         this.claimRepository = claimRepository;
         this.interventionRepository = interventionRepository;
+        this.interventionApprovalRepository = interventionApprovalRepository;
         this.reviewRepository = reviewRepository;
         this.ruleEvaluator = ruleEvaluator;
     }
@@ -104,10 +121,31 @@ public class InterventionApprovalService {
         pending.forEach(intervention -> verifyApproverRole(intervention, actor));
 
         LocalDateTime now = LocalDateTime.now();
-        pending.forEach(intervention ->
-                intervention.resolve(request.approved(), actor, now, request.note()));
+        pending.forEach(intervention -> {
+            // 현재 상태를 갱신한다. INV-4 의 검사 대상은 그대로 이 필드들이다.
+            intervention.resolve(request.approved(), actor, now, request.note());
+            // 같은 트랜잭션에서 처리 이력을 더한다. 반려 뒤 승인이 들어와도
+            // 앞 처리가 지워지지 않는다.
+            interventionApprovalRepository.save(InterventionApproval.of(
+                    intervention, request.approved(), actor, now, request.note()));
+        });
 
-        return pending.stream().map(InterventionResponse::from).toList();
+        // 방금 더한 행까지 포함해 이력을 읽어 응답에 싣는다. 이력 조회
+        // 엔드포인트가 없으므로, 여기서 보이지 않으면 기록은 남아도 쓸 수 없다.
+        interventionApprovalRepository.flush();
+        Map<Long, List<InterventionApproval>> approvals = interventionApprovalRepository
+                .findAllByInterventionIds(pending.stream().map(Intervention::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(
+                        approval -> approval.getIntervention().getId(),
+                        LinkedHashMap::new,
+                        Collectors.toList()));
+
+        return pending.stream()
+                .map(intervention -> InterventionResponse.from(
+                        intervention,
+                        approvals.getOrDefault(intervention.getId(), List.of())))
+                .toList();
     }
 
     /**

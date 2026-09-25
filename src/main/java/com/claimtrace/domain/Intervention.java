@@ -51,6 +51,12 @@ import lombok.NoArgsConstructor;
  * 직무 분리를 검사해 놓고 그 검사를 통과한 사람이 누구였는지 기록하지
  * 않으면 통제가 성립하지 않는다. {@code actorId} 는 개입을 <b>발생시킨</b>
  * 심사자이지 승인자가 아니다.
+ *
+ * <p><b>그 네 컬럼은 현재 상태이지 이력이 아니다.</b> 마지막 처리의 값으로
+ * 덮어써지며, 승인·반려가 일어난 순서와 그 각각의 사유는
+ * {@link InterventionApproval} 에 한 행씩 쌓인다. 이 엔티티는 "규칙이 무엇을
+ * 요구했는가" 한 건이고, 그 요구에 대한 처리는 반려 뒤 승인처럼 여러 번
+ * 일어날 수 있기 때문이다.
  */
 @Entity
 @Table(
@@ -205,6 +211,11 @@ public class Intervention {
      *
      * <p>승인 여부와 행위자·시각을 함께 기록한다. 셋을 나누어 설정할 수
      * 있게 하면 승인 여부만 바뀌고 행위자가 비는 레코드가 만들어질 수 있다.
+     *
+     * <p><b>이 메서드는 현재 상태만 갱신한다.</b> 네 필드는 앞선 처리의 값을
+     * 덮어쓰므로, 호출자는 같은 트랜잭션에서 {@link InterventionApproval} 행을
+     * 더해 처리 이력을 남겨야 한다. 반려된 개입은 {@link #blocksDecision()} 이
+     * 참으로 남아 다시 승인될 수 있고, 이력이 없으면 그때 반려 사유가 사라진다.
      *
      * @param approvedByManager 승인이면 {@code true}, 반려이면 {@code false}
      * @param approver 처리를 수행한 사용자
