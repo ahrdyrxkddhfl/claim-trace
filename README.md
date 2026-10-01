@@ -71,9 +71,9 @@
 
 | 산출물 | 내용 |
 |---|---|
-| [기술서](docs/CLAIMTRACE_기술서.md) | 문제 정의, 액터, 화면 16개, 설계 결정 D-1~D-8, 불변조건 13개, 예외 12개 |
-| [ERD (DBML)](docs/schema.dbml) | 엔터티 15개, Enum 15개, 외래키 31개 |
-| [API 명세 (OpenAPI 3.1)](docs/openapi.yml) | 엔드포인트 36개, request/response 스키마 |
+| [기술서](docs/CLAIMTRACE_기술서.md) | 문제 정의, 액터, 화면 14개, 설계 결정 D-1~D-8, 불변조건 13개, 예외 12개 |
+| [ERD (DBML)](docs/schema.dbml) | 엔터티 16개, Enum 15개, 외래키 33개 |
+| [API 명세 (OpenAPI 3.0)](docs/openapi.yml) | 엔드포인트 36개, request/response 스키마 |
 
 ![ERD](docs/erd.png)
 
@@ -84,8 +84,9 @@
 드러냈는지가 둘 다 남아 있어야 한다고 보았다.
 
 **DBML은 갱신했다.** ERD는 데이터 모델을 보여주는 그림이라, 구현과 다른
-스키마를 그려두면 낡은 것이 아니라 틀린 것이 된다. 승인 기록 3컬럼 추가와
-`intervention_rules` 테이블명 변경이 반영되어 있다.
+스키마를 그려두면 낡은 것이 아니라 틀린 것이 된다. 승인 기록 3컬럼 추가,
+`intervention_approvals` 테이블 추가, `intervention_rules` 테이블명 변경이
+반영되어 있다.
 
 **구현된 API는 실행해서 확인할 수 있다.** 서버를 띄우면 Swagger UI가 구현된
 엔드포인트 8개를 정확한 스키마로 보여준다. 설계 명세(36개)와 구현 문서(8개)는
@@ -422,8 +423,8 @@ PostgreSQL 테스트는 Docker가 필요하다. Docker를 쓸 수 없으면 그 
 | 룰 매칭 엔진 | 근거 생성 규칙은 엔티티 팩토리로 표현하고 단위 테스트로 검증했다 |
 | 자동 판정(STP) | AI는 어떤 상태도 확정하지 않는다는 전제와 충돌한다. 자동처리 대상은 배정 심사자가 없는 상태로 표현되어 있다 |
 
-엔터티는 설계의 15개를 모두 매핑했다. 엔드포인트가 없는 상태 전이도 도메인
-규칙으로는 검증한다. `DomainTransitionTest`가 그 자리다.
+엔터티는 설계의 15개를 모두 매핑했고, 구현 중 추가한 `intervention_approvals`까지
+16개다. 엔드포인트가 없는 상태 전이도 도메인 규칙으로는 검증한다. `DomainTransitionTest`가 그 자리다.
 
 ---
 
@@ -462,10 +463,10 @@ Gradle
 src/main/java/com/claimtrace/
 ├── config/        OpenAPI 문서 구성
 ├── controller/    4개 — 요청 수신과 행위자 결정만 한다
-├── domain/        엔티티 15개 + Enum 15개
+├── domain/        엔티티 16개 + Enum 15개
 ├── dto/           요청·응답 스키마
 ├── exception/     오류 코드, 전역 예외 처리
-├── repository/    10개
+├── repository/    11개
 ├── service/       6개 — 불변조건 검증이 전부 여기 있다
 └── support/       ActorResolver
 
