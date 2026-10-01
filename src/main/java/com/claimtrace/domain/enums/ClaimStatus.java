@@ -9,13 +9,14 @@ package com.claimtrace.domain.enums;
  *
  * <p>이 값은 두 곳에서 판단 근거가 된다.
  * <ul>
- *   <li>INV-7 — {@code DECIDED} 인 청구의 근거는 변경할 수 없다. 위반 시 409(E-6).</li>
+ *   <li>INV-7 — {@code DECIDED} · {@code CLOSED} 인 청구의 근거는 변경할 수 없다. 위반 시 409(E-6).</li>
  *   <li>판정 확정 — 이미 {@code DECIDED} 인 청구를 다시 확정하려 하면 409.</li>
  * </ul>
  *
  * <p><b>정의되지 않은 지점</b> — 설계 문서는 {@code OBJECTION} 상태에서 근거 수정을
- * 허용하는지 규정하지 않았다. 현재 구현은 API 명세 문구를 따라 {@code DECIDED} 만
- * 차단한다. 이 공백은 기술서 7.5에 남긴다.
+ * 허용하는지 규정하지 않았다. 현재 구현은 {@code DECIDED} 와 {@code CLOSED} 만
+ * 차단하고 {@code OBJECTION} 은 열어 둔다({@code Claim.isLocked()}). 이 공백은
+ * 기술서 7.5 ③에 남겼다.
  */
 public enum ClaimStatus {
 
