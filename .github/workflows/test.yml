@@ -18,7 +18,7 @@ on:
 
 jobs:
   test:
-    name: 테스트 78개
+    name: 전체 테스트
     runs-on: ubuntu-latest
 
     steps:
