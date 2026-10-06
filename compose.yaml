@@ -1,0 +1,21 @@
+# PostgreSQL 프로파일로 실행할 때 쓰는 DB.
+#
+#   docker compose up -d
+#   ./gradlew bootRun --args='--spring.profiles.active=postgres'
+#
+# 접속 정보는 application-postgres.yml 의 기본값과 같다. 스키마와 시드는
+# 애플리케이션이 기동할 때마다 다시 만들므로 볼륨을 두지 않는다.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: claimtrace
+      POSTGRES_USER: claimtrace
+      POSTGRES_PASSWORD: claimtrace
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U claimtrace -d claimtrace"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

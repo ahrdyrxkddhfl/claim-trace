@@ -1,9 +1,10 @@
 # =============================================================
 # PostgreSQL 프로파일
 #
-# 접속 정보는 담지 않는다. 테스트가 Testcontainers 로 띄운 컨테이너의
-# 주소를 실행 시점에 주입하므로, 여기에는 프로파일이 달라질 때 바뀌는
-# 항목만 둔다.
+# 접속 정보는 환경변수로 받고, 없으면 저장소 루트의 compose.yaml 이
+# 띄우는 컨테이너를 가리킨다. 이 값을 두지 않으면 기본 설정의 H2 주소를
+# 물려받아, PostgreSQL 전용 문법인 schema-postgres.sql 에서 기동이 실패한다.
+# 테스트는 Testcontainers 가 띄운 컨테이너의 주소로 이 값을 덮어쓴다.
 #
 # 이 프로파일의 목적은 성능 비교가 아니라, INV-12 를 DB 제약으로 강제할 수
 # 있음을 실제 DBMS 에서 보이는 것이다. H2 는 부분 UNIQUE 인덱스를 지원하지
@@ -11,6 +12,12 @@
 # =============================================================
 
 spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/claimtrace}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:claimtrace}
+    password: ${DB_PASSWORD:claimtrace}
+
   jpa:
     hibernate:
       ddl-auto: create

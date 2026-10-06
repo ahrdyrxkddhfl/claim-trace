@@ -330,7 +330,7 @@ CREATE UNIQUE INDEX uk_reviews_current
 ### 요구 사항
 
 - JDK 21
-- Docker (PostgreSQL 테스트에만 필요)
+- Docker (PostgreSQL로 실행하거나 PostgreSQL 테스트를 돌릴 때만 필요)
 
 ### 실행
 
@@ -346,6 +346,16 @@ CREATE UNIQUE INDEX uk_reviews_current
 H2 인메모리를 쓴다. 서버를 내리면 데이터가 사라지고 기동할 때마다 `data.sql`이
 다시 적재된다. 심사 데이터를 영속시키는 것이 목적이 아니라 불변조건이 동작하는
 것을 보이는 것이 목적이다.
+
+PostgreSQL에서 INV-12의 부분 UNIQUE 인덱스까지 걸린 상태로 띄우려면 다음과 같다.
+
+```bash
+docker compose up -d
+./gradlew bootRun --args='--spring.profiles.active=postgres'
+```
+
+접속 정보는 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` 환경변수로 바꿀 수 있다.
+H2와 마찬가지로 기동할 때마다 스키마와 시드를 새로 만든다.
 
 ### 인증 대신 헤더
 
