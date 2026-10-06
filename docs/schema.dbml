@@ -327,6 +327,7 @@ Table reviews {
   reason            text          [not null, note: '판정 사유. 필수 (INV-2)']
   is_current        boolean       [not null, default: true]
   superseded_by     bigint        [ref: > reviews.id, note: '이 판정을 대체한 판정']
+  ai_recommendation_id bigint     [ref: > ai_recommendations.id, note: '판정 당시의 최신 AI 권고. 확정 시 최신 권고와 다르면 재판정 요구. 구현 중 추가']
   decided_at        timestamp     [not null, default: `now()`]
 
   Note: '''

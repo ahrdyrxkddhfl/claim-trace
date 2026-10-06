@@ -65,7 +65,7 @@ public class ClaimController {
             description = """
                     청구 전체의 판정을 확정하고 상태를 DECIDED 로 전이시킨다.
 
-                    검증: INV-10 전 항목 판정 · INV-4 개입 승인 · INV-6 배정 확인
+                    검증: INV-10 전 항목 판정 · 판정 뒤 바뀐 AI 권고 · INV-4 개입 승인 · INV-6 배정 확인
 
                     확정 이후 근거와 판정은 변경할 수 없다 (INV-7).
                     """)
@@ -74,7 +74,7 @@ public class ClaimController {
             @ApiResponse(responseCode = "400", description = "미판정 항목 존재 (E-9)"),
             @ApiResponse(responseCode = "403", description = "복수인 확인 미승인 (E-4) · 타 심사자 배정 건 (E-5)"),
             @ApiResponse(responseCode = "404", description = "대상 청구 없음"),
-            @ApiResponse(responseCode = "409", description = "이미 확정된 청구")
+            @ApiResponse(responseCode = "409", description = "이미 확정된 청구 · 판정 뒤 AI 권고가 바뀌어 재판정 필요")
     })
     public ResponseEntity<DecisionResult> decide(
             @PathVariable Long claimId,

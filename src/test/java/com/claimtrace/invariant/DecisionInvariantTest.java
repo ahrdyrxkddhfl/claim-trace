@@ -263,11 +263,11 @@ class DecisionInvariantTest extends InvariantTestSupport {
     }
 
     @Test
-    @DisplayName("판정 뒤에 도착한 권고는 확정 전에 평가되지 않는다")
-    void 판정_뒤에_도착한_권고는_확정_전에_평가되지_않는다() throws Exception {
+    @DisplayName("판정 당시 권고가 없던 항목에 권고가 도착하면 다시 판정해야 확정할 수 있다")
+    void 판정_당시_권고가_없던_항목에_권고가_도착하면_다시_판정해야_한다() throws Exception {
         // 판정을 저장하는 시점에는 도수치료의 권고가 아직 없다. 모델이
-        // 재처리 중인 상태를 흉내 낸다. 권고를 넣고 내리는 경로가 구현
-        // 범위에 없어 여기서는 직접 조작한다.
+        // 재처리 중인 상태를 흉내 낸다. 권고 수신 API 는 이전 권고를 내리기만
+        // 하고 '권고 없음' 상태를 만들지 않으므로 여기서는 직접 조작한다.
         jdbcTemplate.update(
                 "UPDATE ai_recommendations SET is_latest = FALSE WHERE claim_item_id = ?",
                 ITEM_MANUAL_THERAPY);
@@ -284,17 +284,13 @@ class DecisionInvariantTest extends InvariantTestSupport {
                 "UPDATE ai_recommendations SET is_latest = TRUE WHERE claim_item_id = ?",
                 ITEM_MANUAL_THERAPY);
 
-        // 그러나 확정은 규칙을 다시 평가하지 않고 판정 당시 기록된 개입만
-        // 본다. 그래서 P-03 은 평가된 적 없는 채로 남고 P-07 만 확정을 막는다.
-        //
-        // 이 단언은 개선된 동작이 아니라 현재 구현의 한계를 고정한 것이다.
-        // README 11 장의 조치(규칙 버전 고정 → 확정 시점 재평가 → 트랜잭션
-        // 분리)가 들어오면 기대값을 "P-07", "P-03" 으로 바꾼다.
+        // 확정은 규칙을 다시 평가하지 않는다. 대신 판정이 본 권고(없음)와
+        // 최신 권고가 다르므로 다시 판정하라고 막는다. 예전에는 P-03 이
+        // 평가된 적 없는 채로 P-07 만 확정을 막았다.
         decide(CLAIM_IN_REVIEW, REVIEWER)
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("DUAL_CHECK_REQUIRED"))
-                .andExpect(jsonPath("$.invariant").value("INV-4"))
-                .andExpect(jsonPath("$.details.ruleCodes", containsInAnyOrder("P-07")));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REVIEW_OUTDATED"))
+                .andExpect(jsonPath("$.details.claimItemIds[0]").value(ITEM_MANUAL_THERAPY));
     }
 
     @Test
@@ -305,6 +301,7 @@ class DecisionInvariantTest extends InvariantTestSupport {
                 .andExpect(jsonPath("$.code").value("CLAIM_NOT_ASSIGNED"))
                 .andExpect(jsonPath("$.invariant").value("INV-6"));
     }
+
     @Test
     @DisplayName("INV-4 판정 뒤 들어온 권고로 발동할 규칙이 평가되지 않은 채 확정되지 않는다")
     void 판정_뒤_들어온_권고로_발동할_규칙을_건너뛰고_확정되지_않는다() throws Exception {
@@ -332,13 +329,15 @@ class DecisionInvariantTest extends InvariantTestSupport {
                 .andExpect(jsonPath("$.details.claimItemIds[0]").value(ITEM_MANUAL_THERAPY));
 
         // 다시 판정하면 판정 저장이 새 확률로 규칙을 평가해 P-03 승인을 요구한다.
+        // P-07 도 다시 요구되는 것은 승인 뒤의 판정 저장이 내용과 무관하게
+        // 재승인을 요구하기 때문이다(README 4장 '승인 뒤 판정을 바꿔도').
         saveReview(ITEM_MANUAL_THERAPY, REVIEWER, """
                 {"decision":"DENY","paidAmount":0,"reason":"의학적 타당성이 확인되지 않는다."}
                 """).andExpect(status().isCreated());
         decide(CLAIM_IN_REVIEW, REVIEWER)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("DUAL_CHECK_REQUIRED"))
-                .andExpect(jsonPath("$.details.ruleCodes", containsInAnyOrder("P-03")));
+                .andExpect(jsonPath("$.details.ruleCodes", containsInAnyOrder("P-03", "P-07")));
     }
 
     @Test

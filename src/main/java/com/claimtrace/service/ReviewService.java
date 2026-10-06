@@ -209,6 +209,7 @@ public class ReviewService {
                 .decision(request.decision())
                 .paidAmount(request.paidAmount())
                 .reason(request.reason())
+                .aiRecommendation(latest)
                 .build());
 
         // INV-12 · D-6 — 이전 판정은 지우지 않고 플래그만 이관한다.

@@ -101,6 +101,17 @@ public class Review {
     @JoinColumn(name = "superseded_by")
     private Review supersededBy;
 
+    /**
+     * 판정 당시 이 항목의 최신 AI 권고. 권고가 없던 항목이면 {@code null}.
+     *
+     * <p>확정은 이 값을 지금의 최신 권고와 비교한다. 다르면 판정이 보지 못한
+     * 권고가 있다는 뜻이고, 그 권고로 발동할 규칙(INV-4)과 오버라이드
+     * 판별(INV-3)을 거치지 않았으므로 다시 판정해야 확정할 수 있다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ai_recommendation_id")
+    private AiRecommendation aiRecommendation;
+
     /** 판정 시각. */
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -122,11 +133,12 @@ public class Review {
      * @param decision 지급 판정
      * @param paidAmount 지급 결정액(원)
      * @param reason 판정 사유
+     * @param aiRecommendation 판정 당시의 최신 AI 권고. 없으면 {@code null}
      * @throws IllegalArgumentException 사유가 {@code null} 이거나 공백뿐인 경우
      */
     @Builder
     private Review(ClaimItem claimItem, User reviewer, ItemDecision decision,
-                   Integer paidAmount, String reason) {
+                   Integer paidAmount, String reason, AiRecommendation aiRecommendation) {
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("판정 사유를 입력해야 저장할 수 있습니다 (INV-2)");
         }
@@ -135,6 +147,7 @@ public class Review {
         this.decision = decision;
         this.paidAmount = paidAmount == null ? 0 : paidAmount;
         this.reason = reason;
+        this.aiRecommendation = aiRecommendation;
         this.isCurrent = true;
     }
 

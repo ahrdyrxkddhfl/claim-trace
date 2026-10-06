@@ -195,8 +195,8 @@ INSERT INTO evidences (id, claim_item_id, rule_id, ai_recommendation_id, documen
  '건강보험이 적용되는 진료비는 본인부담금의 80퍼센트를 보험금으로 드립니다.',
  NULL, 30400, NULL, NULL, 1, '2026-09-02 14:10:00', '2026-09-01 10:07:00');
 
-INSERT INTO reviews (id, claim_item_id, reviewer_id, decision, paid_amount, reason, is_current, superseded_by, decided_at) VALUES
-(1, 5, 1, 'PAY', 30400, '급여 진찰료로 담보 한도 내이며 부정 근거가 확인되지 않는다. 자기부담률 20퍼센트를 적용해 산정했다.', TRUE, NULL, '2026-09-02 14:15:00');
+INSERT INTO reviews (id, claim_item_id, reviewer_id, decision, paid_amount, reason, is_current, superseded_by, ai_recommendation_id, decided_at) VALUES
+(1, 5, 1, 'PAY', 30400, '급여 진찰료로 담보 한도 내이며 부정 근거가 확인되지 않는다. 자기부담률 20퍼센트를 적용해 산정했다.', TRUE, NULL, 5, '2026-09-02 14:15:00');
 
 
 -- 국소 설명서 신청.

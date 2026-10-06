@@ -5,10 +5,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.claimtrace.domain.AiRecommendation;
 import com.claimtrace.domain.Claim;
 import com.claimtrace.domain.ClaimItem;
 import com.claimtrace.domain.Intervention;
@@ -18,6 +20,7 @@ import com.claimtrace.dto.DecisionResult;
 import com.claimtrace.exception.ErrorCode;
 import com.claimtrace.exception.InvariantViolationException;
 import com.claimtrace.exception.ResourceNotFoundException;
+import com.claimtrace.repository.AiRecommendationRepository;
 import com.claimtrace.repository.ClaimItemRepository;
 import com.claimtrace.repository.ClaimRepository;
 import com.claimtrace.repository.InterventionRepository;
@@ -32,6 +35,8 @@ import com.claimtrace.domain.enums.InterventionType;
  *   <li>INV-10 — 모든 항목에 현재 판정이 있어야 확정할 수 있다</li>
  *   <li>INV-4 — 규칙이 요구한 개입이 승인되어야 확정할 수 있다</li>
  * </ul>
+ * 그리고 INV-4 의 기록 기준 검사가 성립하게 하는 전제 검사가 하나 있다. 현재
+ * 판정이 본 AI 권고가 지금의 최신 권고와 같아야 한다.
  *
  * <p>둘 다 항목 하나나 판정 하나만 보아서는 판별되지 않는다. 판정 저장
  * 시점으로 앞당길 수 없는 검사이며, 그래서 확정이라는 별도의 진입점이
@@ -51,12 +56,14 @@ import com.claimtrace.domain.enums.InterventionType;
  * 않는다</b>는 전제 위에서다. 입력값은 항목의 청구금액·담보 분류와 최신 AI
  * 권고의 보상제외 확률 셋이고, 규칙 집합 자체도 여기 포함된다.
  *
- * <p>현재 구현에서 그 전제는 성립한다. 판정 저장은 청구의 <b>전</b> 항목을
- * 매번 평가하고(INV-10 이 전 항목 판정을 요구하므로 확정 전에 최소 한 번은
- * 평가된다), AI 권고를 새로 넣거나 규칙을 수정하는 경로가 구현 범위에 없다.
- * 전제가 깨지는 것은 그 두 경로 중 하나가 생기는 날이며, 그때 무엇을 해야
- * 하는지는 README 11 장에 적었다. 지금 재평가를 넣지 않는 이유는 검증할
- * 위협 경로가 없어서이지, 그 상태가 안전해서가 아니다.
+ * <p>판정 저장은 청구의 <b>전</b> 항목을 매번 평가한다(INV-10 이 전 항목
+ * 판정을 요구하므로 확정 전에 최소 한 번은 평가된다). 입력값 중 판정 뒤에
+ * 바뀔 수 있는 것은 AI 권고뿐이다. 그래서 판정이 본 권고와 최신 권고가
+ * 다른 항목이 있으면 다시 판정하게 해({@code REVIEW_OUTDATED}) 전제를
+ * 복원한다. 재평가 대신 재판정을 고른 것은 규칙 평가와 INV-3 판별을 판정
+ * 저장 한 곳에 두기 위해서다. 확정에서 개입을 기록하면 INV-4 위반 예외와
+ * 함께 롤백되는 문제도 생기지 않는다. 규칙을 수정하는 경로는 여전히 구현
+ * 범위 밖이며, 그 경로가 생길 때 필요한 것은 README 11 장에 적었다.
  *
  * <p><b>확정 이후에는 되돌릴 수 없다.</b> 상태가 {@code DECIDED} 가 되면
  * INV-7 이 근거와 판정의 변경을 막는다. 이의제기가 들어오면 상태가
@@ -69,6 +76,7 @@ public class ClaimDecisionService {
     private final ClaimItemRepository claimItemRepository;
     private final ReviewRepository reviewRepository;
     private final InterventionRepository interventionRepository;
+    private final AiRecommendationRepository aiRecommendationRepository;
 
     /**
      * 의존성을 주입받는다.
@@ -77,15 +85,18 @@ public class ClaimDecisionService {
      * @param claimItemRepository 항목 조회
      * @param reviewRepository 현재 판정 조회
      * @param interventionRepository 개입 이력 조회
+     * @param aiRecommendationRepository 최신 권고 조회
      */
     public ClaimDecisionService(ClaimRepository claimRepository,
                                 ClaimItemRepository claimItemRepository,
                                 ReviewRepository reviewRepository,
-                                InterventionRepository interventionRepository) {
+                                InterventionRepository interventionRepository,
+                                AiRecommendationRepository aiRecommendationRepository) {
         this.claimRepository = claimRepository;
         this.claimItemRepository = claimItemRepository;
         this.reviewRepository = reviewRepository;
         this.interventionRepository = interventionRepository;
+        this.aiRecommendationRepository = aiRecommendationRepository;
     }
 
     /**
@@ -95,7 +106,8 @@ public class ClaimDecisionService {
      * @param actor 확정을 수행하는 심사자
      * @return 확정 결과
      * @throws ResourceNotFoundException 청구가 존재하지 않는 경우
-     * @throws InvariantViolationException INV-4 · INV-6 · INV-7 · INV-10 을 위반한 경우
+     * @throws InvariantViolationException INV-4 · INV-6 · INV-7 · INV-10 을 위반하거나
+     *         판정 뒤에 AI 권고가 바뀐 항목이 있는 경우
      */
     @Transactional
     public DecisionResult decide(Long claimId, User actor) {
@@ -131,6 +143,14 @@ public class ClaimDecisionService {
                     ErrorCode.PENDING_ITEMS_EXIST, Map.of("pendingItemIds", pendingItemIds));
         }
 
+        // 판정이 보지 못한 권고가 있으면 다시 판정해야 한다. 재판정이 새 승인
+        // 대기 개입을 만들 수 있으므로 INV-4 검사보다 먼저 한다.
+        List<Long> outdatedItemIds = findOutdatedItemIds(claimId, items, currentReviews);
+        if (!outdatedItemIds.isEmpty()) {
+            throw new InvariantViolationException(
+                    ErrorCode.REVIEW_OUTDATED, Map.of("claimItemIds", outdatedItemIds));
+        }
+
         // INV-4 — 승인되지 않은 개입이 남아 있으면 단독으로 확정할 수 없다.
         List<Intervention> blocking = interventionRepository.findAllByClaimId(claimId).stream()
                 .filter(Intervention::blocksDecision)
@@ -164,6 +184,35 @@ public class ClaimDecisionService {
             indexed.putIfAbsent(review.getClaimItem().getId(), review);
         }
         return indexed;
+    }
+
+    /**
+     * 현재 판정이 본 권고와 최신 권고가 다른 항목을 찾는다.
+     *
+     * <p>식별자로 비교한다. 시각으로 비교하면 같은 시각에 찍힌 판정과 권고의
+     * 선후를 가릴 수 없다. 판정 당시 권고가 없었는데 지금은 있는 항목도
+     * 다른 것으로 본다. 그 권고로 발동할 규칙이 평가되지 않았기 때문이다.
+     *
+     * @param claimId 청구 식별자
+     * @param items 청구의 항목
+     * @param currentReviews 항목별 현재 판정. 모든 항목에 있어야 한다(INV-10 확인 후)
+     * @return 다시 판정해야 하는 항목 식별자
+     */
+    private List<Long> findOutdatedItemIds(Long claimId, List<ClaimItem> items,
+                                           Map<Long, Review> currentReviews) {
+        Map<Long, Long> latestIds = new LinkedHashMap<>();
+        for (AiRecommendation latest : aiRecommendationRepository.findLatestByClaimId(claimId)) {
+            latestIds.put(latest.getClaimItem().getId(), latest.getId());
+        }
+        List<Long> outdated = new ArrayList<>();
+        for (ClaimItem item : items) {
+            AiRecommendation seen = currentReviews.get(item.getId()).getAiRecommendation();
+            Long seenId = seen == null ? null : seen.getId();
+            if (!Objects.equals(seenId, latestIds.get(item.getId()))) {
+                outdated.add(item.getId());
+            }
+        }
+        return outdated;
     }
 
     /**
