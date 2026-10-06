@@ -305,4 +305,67 @@ class DecisionInvariantTest extends InvariantTestSupport {
                 .andExpect(jsonPath("$.code").value("CLAIM_NOT_ASSIGNED"))
                 .andExpect(jsonPath("$.invariant").value("INV-6"));
     }
+    @Test
+    @DisplayName("INV-4 판정 뒤 들어온 권고로 발동할 규칙이 평가되지 않은 채 확정되지 않는다")
+    void 판정_뒤_들어온_권고로_발동할_규칙을_건너뛰고_확정되지_않는다() throws Exception {
+        // 판정 전에 도수치료의 확률이 0.5 로 내려와 P-03(0.8 이상)은 발동하지 않는다.
+        submitRecommendations(CLAIM_IN_REVIEW, """
+                {"modelName":"claim-risk","modelVersion":"v2.4","threshold":0.3,
+                 "items":[{"claimItemId":2,"exclusionProbability":0.500,
+                           "recommendation":"DENY","contributions":[]}]}
+                """).andExpect(status().isCreated());
+        reviewAllItemsFollowingAi();
+        resolveDualCheck(CLAIM_IN_REVIEW, MANAGER, """
+                {"approved":true,"note":"P-07 비급여 고액 항목 확인"}
+                """).andExpect(status().isOk());
+
+        // 판정과 승인이 끝난 뒤 확률이 0.85 로 올라온다. P-03 은 한 번도 평가되지 않았다.
+        submitRecommendations(CLAIM_IN_REVIEW, """
+                {"modelName":"claim-risk","modelVersion":"v2.5","threshold":0.3,
+                 "items":[{"claimItemId":2,"exclusionProbability":0.850,
+                           "recommendation":"DENY","contributions":[]}]}
+                """).andExpect(status().isCreated());
+
+        decide(CLAIM_IN_REVIEW, REVIEWER)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REVIEW_OUTDATED"))
+                .andExpect(jsonPath("$.details.claimItemIds[0]").value(ITEM_MANUAL_THERAPY));
+
+        // 다시 판정하면 판정 저장이 새 확률로 규칙을 평가해 P-03 승인을 요구한다.
+        saveReview(ITEM_MANUAL_THERAPY, REVIEWER, """
+                {"decision":"DENY","paidAmount":0,"reason":"의학적 타당성이 확인되지 않는다."}
+                """).andExpect(status().isCreated());
+        decide(CLAIM_IN_REVIEW, REVIEWER)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("DUAL_CHECK_REQUIRED"))
+                .andExpect(jsonPath("$.details.ruleCodes", containsInAnyOrder("P-03")));
+    }
+
+    @Test
+    @DisplayName("INV-3 판정 뒤 권고가 판정과 달라지면 사유 없이 확정되지 않는다")
+    void 판정_뒤_권고가_달라지면_사유_없이_확정되지_않는다() throws Exception {
+        reviewAllItemsFollowingAi();
+        resolveDualCheck(CLAIM_IN_REVIEW, MANAGER, """
+                {"approved":true,"note":"확인했다."}
+                """).andExpect(status().isOk());
+
+        // 진찰료를 PAY 로 판정한 뒤 모델이 DENY 를 권고한다. 판정은 이제 권고를 뒤집는다.
+        submitRecommendations(CLAIM_IN_REVIEW, """
+                {"modelName":"claim-risk","modelVersion":"v2.4","threshold":0.3,
+                 "items":[{"claimItemId":1,"exclusionProbability":0.400,
+                           "recommendation":"DENY","contributions":[]}]}
+                """).andExpect(status().isCreated());
+
+        decide(CLAIM_IN_REVIEW, REVIEWER)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REVIEW_OUTDATED"))
+                .andExpect(jsonPath("$.details.claimItemIds[0]").value(ITEM_CONSULT));
+
+        // 같은 판정을 다시 저장하려면 오버라이드 사유가 필요하다.
+        saveReview(ITEM_CONSULT, REVIEWER, """
+                {"decision":"PAY","paidAmount":19200,"reason":"급여 항목으로 자기부담률을 적용했다."}
+                """)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("OVERRIDE_REASON_REQUIRED"));
+    }
 }
