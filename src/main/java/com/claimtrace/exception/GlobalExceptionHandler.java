@@ -1,26 +1,36 @@
 package com.claimtrace.exception;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.exc.InvalidFormatException;
+
 /**
- * 전역 예외 처리기. 모든 오류 응답이 이 한 곳을 지난다.
+ * 전역 예외 처리기. 엔드포인트에 닿은 요청의 오류 응답은 모두 이 한 곳을 지난다.
  *
  * <p>컨트롤러가 예외를 잡아 응답을 만들지 않는 이유는, 같은 불변조건 위반이
  * 엔드포인트마다 다른 형태로 나가는 것을 막기 위해서다. 판정 저장에서의
  * INV-7 위반과 근거 수정에서의 INV-7 위반은 같은 응답이어야 한다.
  *
- * <p>처리하는 예외가 네 종류다.
+ * <p>처리하는 예외는 다음과 같다.
  * <ul>
  *   <li>{@link InvariantViolationException} — 서비스가 던지는 설계 위반</li>
  *   <li>{@link ResourceNotFoundException} — 대상 없음</li>
  *   <li>{@link RuleDefinitionException} — 개입 규칙 데이터 오류</li>
  *   <li>{@link MethodArgumentNotValidException} — 요청 본문의 형식 검증 실패</li>
+ *   <li>{@link MissingRequestHeaderException},
+ *       {@link HttpMessageNotReadableException} — 컨트롤러에 들어오기 전에
+ *       Spring 이 거부한 요청(헤더 누락, 정의되지 않은 enum 값, 깨진 JSON)</li>
  *   <li>{@link IllegalArgumentException}, {@link IllegalStateException} —
  *       엔티티가 스스로 막은 경우</li>
  * </ul>
@@ -31,6 +41,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * {@code invariant} 가 비게 된다. 정상 경로는 서비스가 먼저 검사해
  * {@link InvariantViolationException} 을 던지는 것이며, 이 처리기가
  * 동작한다면 서비스에 검증이 빠졌다는 신호다.
+ *
+ * <p>경로·메서드·미디어 타입이 맞지 않는 요청(404 · 405 · 415)은 처리하지
+ * 않아 Spring 기본 형식으로 나간다. 어느 엔드포인트에도 닿지 않은 요청이라
+ * 불변조건과 무관하다.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -96,6 +110,56 @@ public class GlobalExceptionHandler {
                 .forEach(error -> fields.put(error.getField(), error.getDefaultMessage()));
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
                 .body(ErrorResponse.of(ErrorCode.INVALID_REQUEST, fields));
+    }
+
+    /**
+     * 필수 요청 헤더가 없는 경우를 처리한다.
+     *
+     * <p>행위자 헤더 {@code X-Actor-Id} 가 대표적이다. 처리하지 않으면 Spring
+     * 기본 형식의 400 이 나가, 클라이언트가 {@code code} 로 분기할 수 없다.
+     *
+     * @param ex 발생한 예외
+     * @return 400 과 빠진 헤더 이름
+     */
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ErrorResponse> handleMissingHeader(MissingRequestHeaderException ex) {
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
+                .body(ErrorResponse.of(ErrorCode.INVALID_REQUEST, Map.of("header", ex.getHeaderName())));
+    }
+
+    /**
+     * 요청 본문을 읽을 수 없는 경우를 처리한다.
+     *
+     * <p>정의되지 않은 enum 값이면 Jackson 의 {@link InvalidFormatException} 이
+     * 원인으로 실려 온다. 그때는 어느 필드에 어떤 값이 들어왔고 무엇이
+     * 허용되는지를 {@code details} 에 담는다. 판정 값을 잘못 쓴 클라이언트가
+     * 허용값을 응답에서 바로 알 수 있게 하기 위해서다. 그 밖의 경우(깨진 JSON,
+     * 빈 본문)는 본문을 읽지 못했다는 사실만 알린다. 파서의 원문 메시지에는
+     * 내부 클래스 이름이 들어 있어 그대로 싣지 않는다.
+     *
+     * @param ex 발생한 예외
+     * @return 400 과 문제가 된 필드·값, 또는 본문을 읽지 못했다는 설명
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        if (ex.getMostSpecificCause() instanceof InvalidFormatException invalid) {
+            List<JacksonException.Reference> path = invalid.getPath();
+            if (!path.isEmpty()) {
+                details.put("field", path.get(path.size() - 1).getPropertyName());
+            }
+            details.put("value", String.valueOf(invalid.getValue()));
+            Class<?> target = invalid.getTargetType();
+            if (target != null && target.isEnum()) {
+                details.put("allowed", Arrays.stream(target.getEnumConstants())
+                        .map(constant -> ((Enum<?>) constant).name())
+                        .toList());
+            }
+        } else {
+            details.put("detail", "요청 본문을 JSON 으로 읽을 수 없습니다");
+        }
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
+                .body(ErrorResponse.of(ErrorCode.INVALID_REQUEST, details));
     }
 
     /**

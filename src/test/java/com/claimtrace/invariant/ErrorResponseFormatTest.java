@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -39,7 +40,10 @@ class ErrorResponseFormatTest extends InvariantTestSupport {
                 """)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-                .andExpect(jsonPath("$.details.field").value("decision"));
+                .andExpect(jsonPath("$.details.field").value("decision"))
+                .andExpect(jsonPath("$.details.value").value("MAYBE"))
+                .andExpect(jsonPath("$.details.allowed").value(
+                        containsInAnyOrder("PAY", "PARTIAL", "DENY")));
     }
 
     @Test

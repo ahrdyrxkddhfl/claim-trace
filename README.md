@@ -153,7 +153,15 @@ INV-8과 INV-9는 예외 코드가 없다. 전자는 생성 자체를 막고, �
 "AI는 부지급을 권고했는데 일부지급으로 판정하셨습니다"를 화면에 그대로 띄울 수
 있다.
 
-### 테스트 83개
+요청 형식이 틀린 경우도 같은 형식으로 나간다. `X-Actor-Id` 헤더 누락, 정의되지
+않은 enum 값, 깨진 JSON은 컨트롤러에 들어오기 전에 Spring이 거부해, 처음에는
+`code`가 없는 Spring 기본 400이 나갔다. 전역 처리기에 두 예외를 추가해
+`INVALID_REQUEST`로 응답하고, enum 값이 틀리면 필드·입력값·허용값을 `details`에
+담는다. 경로·메서드·미디어 타입이 맞지 않는 요청(404 · 405 · 415)은 어느
+엔드포인트에도 닿지 않은 것이라 기본 형식으로 두었다. 실패 테스트를 먼저 커밋하고
+고쳤다.
+
+### 테스트 86개
 
 ```
 DomainTransitionTest          26   엔티티 상태 전이와 생성 규칙 (Spring 없음)
@@ -165,6 +173,7 @@ ExplanationInvariantTest       5   INV-5 · 6 · 8 · 9
 ClaimWorkflowIntegrationTest   3   판정부터 설명문 초안까지 전체 흐름
 PostgresInvariantTest          3   INV-12 DB 제약 (Testcontainers)
 ConcurrencyInvariantTest       1   INV-12 동시 요청
+ErrorResponseFormatTest        3   요청 형식 오류의 공통 오류 형식
 ```
 
 테스트는 HTTP 상태 코드만 보지 않는다. 응답의 `code`와 `invariant`까지 확인한다.
@@ -443,7 +452,7 @@ Swagger UI에서 순서대로 실행하면 된다.
 ./gradlew test
 ```
 
-84개(불변조건 83 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
+87개(불변조건 86 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
 
 PostgreSQL 테스트는 Docker가 필요하다. Docker를 쓸 수 없으면 그 클래스만
 실패하고 나머지 검증에는 영향이 없다.
@@ -526,7 +535,7 @@ src/main/java/com/claimtrace/
 ├── service/       6개 — 불변조건 검증이 전부 여기 있다
 └── support/       ActorResolver
 
-src/test/java/com/claimtrace/invariant/    테스트 83개
+src/test/java/com/claimtrace/invariant/    테스트 86개
 ```
 
 컨트롤러는 불변조건을 검사하지 않는다. 같은 규칙을 컨트롤러마다 되풀이하면
