@@ -367,4 +367,21 @@ class DecisionInvariantTest extends InvariantTestSupport {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("OVERRIDE_REASON_REQUIRED"));
     }
+    @Test
+    @DisplayName("승인 뒤 같은 내용으로 다시 저장하면 재승인 없이 확정된다")
+    void 승인_뒤_같은_내용으로_다시_저장하면_재승인_없이_확정된다() throws Exception {
+        reviewAllItemsFollowingAi();
+        resolveDualCheck(CLAIM_IN_REVIEW, MANAGER, """
+                {"approved":true,"note":"확인했다."}
+                """).andExpect(status().isOk());
+
+        // 판정·지급액·권고가 모두 승인 때와 같다. 승인자가 확인한 내용이 바뀌지 않았다.
+        saveReview(ITEM_CONSULT, REVIEWER, """
+                {"decision":"PAY","paidAmount":19200,"reason":"급여 항목으로 자기부담률을 적용했다."}
+                """).andExpect(status().isCreated());
+
+        decide(CLAIM_IN_REVIEW, REVIEWER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DECIDED"));
+    }
 }
