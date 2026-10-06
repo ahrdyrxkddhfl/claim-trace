@@ -207,6 +207,62 @@ class DecisionInvariantTest extends InvariantTestSupport {
     }
 
     @Test
+    @DisplayName("INV-4 승인 뒤 판정을 바꾸면 다시 승인받아야 확정할 수 있다")
+    void 승인_뒤_판정을_바꾸면_다시_승인받아야_확정할_수_있다() throws Exception {
+        // 도수치료를 PARTIAL 240,000원으로 판정한 상태에서 승인받는다.
+        // 이 시점의 지급 총액은 613,200원이고, 심사관리자가 확인한 것은 이 금액이다.
+        saveReview(ITEM_CONSULT, REVIEWER, """
+                {"decision":"PAY","paidAmount":19200,"reason":"부정 근거가 확인되지 않는다."}
+                """);
+        saveReview(ITEM_MANUAL_THERAPY, REVIEWER, """
+                {"decision":"PARTIAL","paidAmount":240000,"reason":"한도 내 일부를 지급한다.",
+                 "overrideReasonType":"TERMS_INTERPRETATION","overrideReason":"소견서로 요건이 충족된다."}
+                """);
+        saveReview(ITEM_SHOCKWAVE, REVIEWER, """
+                {"decision":"PARTIAL","paidAmount":210000,"reason":"선행 보존치료 기록이 일부만 확인된다."}
+                """);
+        saveReview(ITEM_RADIOLOGY, REVIEWER, """
+                {"decision":"PAY","paidAmount":144000,"reason":"부정 근거가 확인되지 않는다."}
+                """);
+
+        resolveDualCheck(CLAIM_IN_REVIEW, MANAGER, """
+                {"approved":true,"note":"240,000원 일부 지급을 승인한다."}
+                """).andExpect(status().isOk());
+
+        // 승인 뒤 심사자가 도수치료를 전액 지급으로 바꾼다. 지급 총액이
+        // 853,200원이 되는데, 이 금액은 누구의 확인도 거치지 않았다.
+        saveReview(ITEM_MANUAL_THERAPY, REVIEWER, """
+                {"decision":"PAY","paidAmount":480000,"reason":"추가 소견서로 전액 지급한다.",
+                 "overrideReasonType":"TERMS_INTERPRETATION","overrideReason":"추가 소견서로 요건이 충족된다."}
+                """).andExpect(status().isCreated());
+
+        // 승인은 특정 판정에 대한 확인이므로, 판정이 바뀌면 다시 받아야 한다.
+        decide(CLAIM_IN_REVIEW, REVIEWER)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("DUAL_CHECK_REQUIRED"))
+                .andExpect(jsonPath("$.invariant").value("INV-4"))
+                .andExpect(jsonPath("$.details.ruleCodes", containsInAnyOrder("P-07", "P-03")));
+
+        // 다시 승인하면 바뀐 금액으로 확정된다.
+        resolveDualCheck(CLAIM_IN_REVIEW, MANAGER, """
+                {"approved":true,"note":"전액 지급을 승인한다."}
+                """).andExpect(status().isOk());
+
+        decide(CLAIM_IN_REVIEW, REVIEWER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paidTotal").value(19200 + 480000 + 210000 + 144000));
+
+        // 첫 승인은 지워지지 않는다. 그 승인이 240,000원 판정에 대한 것이었다는
+        // 사실도 "누가 무엇을 확인했는가"의 일부다.
+        List<Intervention> required = interventionRepository.findAllByClaimId(CLAIM_IN_REVIEW).stream()
+                .filter(intervention -> intervention.getInterventionRule() != null)
+                .toList();
+        assertEquals(4, required.size(), "규칙 두 개에 대해 첫 승인분과 재승인분이 각각 남아야 한다");
+        required.forEach(intervention -> assertEquals(Boolean.TRUE, intervention.getApproved(),
+                "개입 " + intervention.getId() + " 은 승인된 상태여야 한다"));
+    }
+
+    @Test
     @DisplayName("판정 뒤에 도착한 권고는 확정 전에 평가되지 않는다")
     void 판정_뒤에_도착한_권고는_확정_전에_평가되지_않는다() throws Exception {
         // 판정을 저장하는 시점에는 도수치료의 권고가 아직 없다. 모델이
