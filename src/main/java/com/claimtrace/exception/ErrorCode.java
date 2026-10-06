@@ -83,8 +83,9 @@ public enum ErrorCode {
      * {@code Evidence.isUsableInCustomerExplanation()} 에서 조용히 걸러진다.
      * 심사자는 근거를 공개했다고 믿는데 고객 문서에는 나타나지 않는다.
      *
-     * <p>오류가 아니라 침묵으로 나타나는 문제라 더 위험하다. 근거를 만드는
-     * 시점에 막는다. 특정 불변조건의 위반은 아니므로 번호를 달지 않는다.
+     * <p>오류가 아니라 침묵으로 나타나는 문제라 더 위험하다. 근거를 만들 때와
+     * 상태 변경으로 공개 수준을 고객용으로 바꿀 때 막는다. 특정 불변조건의
+     * 위반은 아니므로 번호를 달지 않는다.
      */
     CUSTOMER_CONTENT_REQUIRED(
             "고객용 근거에는 고객용 문구가 필요합니다", null, HttpStatus.BAD_REQUEST),

@@ -16,7 +16,9 @@ import jakarta.validation.constraints.NotNull;
  *
  * <p>{@code disclosureLevel} 은 선택이다. 값이 있으면 상태 변경과 함께
  * 공개 수준도 바꾼다. 심사자가 화면 10 에서 채택과 공개 수준 조정을
- * 한 번에 하는 흐름에 맞춘 것이다.
+ * 한 번에 하는 흐름에 맞춘 것이다. 이 요청에는 문구 필드가 없으므로,
+ * 고객용 문구가 없는 근거를 고객용으로 바꾸면 {@code CUSTOMER_CONTENT_REQUIRED}
+ * 로 거부된다.
  *
  * @param status 전이할 상태
  * @param rejectionReasonType 기각 사유 유형. 기각으로 전이할 때 필수(INV-11)

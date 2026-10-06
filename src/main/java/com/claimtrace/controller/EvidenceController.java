@@ -65,11 +65,11 @@ public class EvidenceController {
             description = """
                     근거의 상태를 전이시킨다. 기각된 근거는 삭제되지 않고 사유와 함께 보존된다 (D-3).
 
-                    검증: INV-11 기각 사유 · INV-6 배정 확인 · INV-7 확정 여부
+                    검증: INV-11 기각 사유 · INV-6 배정 확인 · INV-7 확정 여부 · 고객용 근거의 문구 존재
                     """)
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "상태 변경 완료"),
-            @ApiResponse(responseCode = "400", description = "기각 사유 미선택 (E-10)"),
+            @ApiResponse(responseCode = "400", description = "기각 사유 미선택 (E-10) · 고객용 문구 없는 근거를 고객용으로 변경"),
             @ApiResponse(responseCode = "403", description = "타 심사자 배정 건 (E-5)"),
             @ApiResponse(responseCode = "404", description = "대상 근거 없음"),
             @ApiResponse(responseCode = "409", description = "이미 확정된 청구의 근거 (E-6)")

@@ -89,12 +89,8 @@ public class EvidenceService {
         Claim claim = item.getClaim();
 
         verifyModifiable(claim, actor, Map.of("claimItemId", itemId));
-
-        if (request.disclosureLevel() == DisclosureLevel.CUSTOMER
-                && (request.contentCustomer() == null || request.contentCustomer().isBlank())) {
-            throw new InvariantViolationException(
-                    ErrorCode.CUSTOMER_CONTENT_REQUIRED, Map.of("claimItemId", itemId));
-        }
+        verifyCustomerContent(request.disclosureLevel(), request.contentCustomer(),
+                Map.of("claimItemId", itemId));
 
         Document document = null;
         if (request.documentId() != null) {
@@ -140,17 +136,38 @@ public class EvidenceService {
     }
 
     /**
+     * 고객용 근거에 고객용 문구가 있는지 확인한다.
+     *
+     * <p>근거 추가와 상태 변경 둘 다 공개 수준을 고객용으로 만들 수 있으므로
+     * 한곳에 모은다. 처음에는 근거 추가에만 이 검사가 있어, 상태 변경의
+     * {@code disclosureLevel} 로 같은 상태를 만들 수 있었다.
+     *
+     * @param level 적용될 공개 수준
+     * @param contentCustomer 근거가 갖게 될 고객용 문구
+     * @param context 오류 응답에 실을 추가 정보
+     * @throws InvariantViolationException 고객용인데 고객용 문구가 비어 있는 경우
+     */
+    private void verifyCustomerContent(DisclosureLevel level, String contentCustomer,
+                                       Map<String, Object> context) {
+        if (level == DisclosureLevel.CUSTOMER
+                && (contentCustomer == null || contentCustomer.isBlank())) {
+            throw new InvariantViolationException(ErrorCode.CUSTOMER_CONTENT_REQUIRED, context);
+        }
+    }
+
+    /**
      * 근거의 상태를 전이시킨다.
      *
      * <p>기각으로 전이할 때는 사유 유형이 반드시 있어야 한다(INV-11).
-     * 확정된 청구의 근거는 어떤 전이도 할 수 없다(INV-7).
+     * 확정된 청구의 근거는 어떤 전이도 할 수 없다(INV-7). 공개 수준을
+     * 고객용으로 바꿀 때는 근거에 고객용 문구가 있어야 한다.
      *
      * @param evidenceId 근거 식별자
      * @param request 전이할 상태와 사유
      * @param actor 검토를 수행하는 심사자
      * @return 변경된 근거
      * @throws ResourceNotFoundException 근거가 존재하지 않는 경우
-     * @throws InvariantViolationException INV-6 · INV-7 · INV-11 을 위반한 경우
+     * @throws InvariantViolationException INV-6 · INV-7 · INV-11 을 위반하거나 고객용 문구가 없는 경우
      */
     @Transactional
     public EvidenceResponse changeStatus(Long evidenceId, EvidenceStatusRequest request, User actor) {
@@ -159,6 +176,11 @@ public class EvidenceService {
         Claim claim = evidence.getClaimItem().getClaim();
 
         verifyModifiable(claim, actor, Map.of("evidenceId", evidenceId));
+
+        // 상태 변경 요청에는 문구 필드가 없으므로 근거가 이미 가진 문구로 판단한다.
+        // 채택·기각보다 먼저 검사해야 거부된 요청이 상태를 일부만 바꿔 두지 않는다.
+        verifyCustomerContent(request.disclosureLevel(), evidence.getContentCustomer(),
+                Map.of("evidenceId", evidenceId));
 
         LocalDateTime now = LocalDateTime.now();
         switch (request.status()) {

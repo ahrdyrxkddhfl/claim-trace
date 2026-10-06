@@ -153,11 +153,11 @@ INV-8과 INV-9는 예외 코드가 없다. 전자는 생성 자체를 막고, �
 "AI는 부지급을 권고했는데 일부지급으로 판정하셨습니다"를 화면에 그대로 띄울 수
 있다.
 
-### 테스트 82개
+### 테스트 83개
 
 ```
 DomainTransitionTest          26   엔티티 상태 전이와 생성 규칙 (Spring 없음)
-EvidenceInvariantTest         10   INV-6 · 7 · 11, D-3
+EvidenceInvariantTest         11   INV-6 · 7 · 11, D-3, 공개 수준과 문구
 ReviewInvariantTest           13   INV-1 · 2 · 3 · 6 · 7 · 12, D-6 · D-7, 지급액
 RuleEvaluatorTest             10   D-5 개입 규칙 평가 (Spring 없음)
 DecisionInvariantTest         11   INV-4 · 10, 직무 분리, 승인 기록과 처리 이력
@@ -259,6 +259,18 @@ INV-1은 모든 상태 전이에 행위자를 요구하고, 이 시스템의 전
 
 **오류가 아니라 침묵으로 나타나는 문제라 더 위험하다.** 근거를 만드는 시점에
 막았다.
+
+### 그 검사가 근거 추가에만 있었다
+
+공개 수준은 근거를 추가할 때만 정하는 값이 아니다. 근거 상태 변경 요청도
+`disclosureLevel`을 함께 받아, 채택하면서 공개 수준을 바꿀 수 있다. 그런데 위 검사는
+근거 추가에만 있었다. 내부용이고 고객용 문구가 없는 AI 근거를 채택하며 `CUSTOMER`로
+바꾸면 200이 나왔고, 막으려던 침묵이 그대로 재현되었다.
+
+검사를 근거 추가와 상태 변경이 함께 쓰는 메서드 하나로 모았다. 상태 변경 요청에는
+문구 필드가 없으므로 근거가 이미 가진 문구로 판단하고, 채택·기각보다 먼저 검사해
+거부된 요청이 상태를 일부만 바꿔 두지 않게 했다. 같은 규칙을 두 경로에 따로 두면
+한쪽에만 남는다는 것을 보여준 사례다. 실패 테스트를 먼저 커밋하고 고쳤다.
 
 ### 판정과 지급액의 관계가 없었다
 
@@ -431,7 +443,7 @@ Swagger UI에서 순서대로 실행하면 된다.
 ./gradlew test
 ```
 
-83개(불변조건 82 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
+84개(불변조건 83 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
 
 PostgreSQL 테스트는 Docker가 필요하다. Docker를 쓸 수 없으면 그 클래스만
 실패하고 나머지 검증에는 영향이 없다.
@@ -514,7 +526,7 @@ src/main/java/com/claimtrace/
 ├── service/       6개 — 불변조건 검증이 전부 여기 있다
 └── support/       ActorResolver
 
-src/test/java/com/claimtrace/invariant/    테스트 82개
+src/test/java/com/claimtrace/invariant/    테스트 83개
 ```
 
 컨트롤러는 불변조건을 검사하지 않는다. 같은 규칙을 컨트롤러마다 되풀이하면
