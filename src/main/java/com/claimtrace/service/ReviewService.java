@@ -59,7 +59,8 @@ import com.claimtrace.repository.ReviewRepository;
  * 문서와 어긋나지 않는다.
  *
  * <p>같은 청구의 여러 항목을 차례로 판정하면 같은 규칙이 반복 발동하므로,
- * 이미 기록된 규칙은 다시 만들지 않는다.
+ * 승인 대기 중인 규칙은 다시 만들지 않는다. 이미 승인된 규칙이 다시
+ * 발동하면 새로 만든다. 승인 뒤 판정이 바뀐 것이므로 다시 확인받아야 한다.
  *
  * <p><b>검증이 먼저이고 저장이 나중인 이유</b> — 5번 이후로는 실패할 수 없어야
  * 한다. 판정이 저장된 뒤에 개입 기록 생성이 실패하면, 롤백이 걸리더라도
@@ -260,22 +261,43 @@ public class ReviewService {
     /**
      * 발동한 규칙의 승인 대기 개입을 기록한다.
      *
-     * <p>이미 같은 규칙으로 기록된 개입이 있으면 건너뛴다. 같은 청구의 여러
-     * 항목을 차례로 판정하면 같은 규칙이 반복 발동하는데, 그때마다 대기
-     * 레코드를 만들면 심사관리자가 같은 건을 여러 번 승인해야 하고 하나만
-     * 승인되면 나머지가 대기로 남아 INV-4 가 확정을 계속 막는다.
+     * <p>같은 규칙의 개입이 아직 확정을 막고 있으면(대기 또는 반려) 건너뛴다.
+     * 같은 청구의 여러 항목을 차례로 판정하면 같은 규칙이 반복 발동하는데,
+     * 그때마다 대기 레코드를 만들면 심사관리자가 같은 건을 여러 번 승인해야
+     * 하고 하나만 승인되면 나머지가 대기로 남아 INV-4 가 확정을 계속 막는다.
+     *
+     * <p><b>같은 규칙의 개입이 모두 승인된 뒤라면 새로 만든다.</b> 승인은
+     * 승인 당시의 판정을 확인한 것이지 그 뒤에 바뀔 판정까지 보증한 것이
+     * 아니다. 규칙의 발동 조건은 청구금액·담보 분류·권고 확률만 보고 판정
+     * 내용은 보지 않으므로, 판정을 바꿔도 같은 규칙이 그대로 발동한다.
+     * 존재 여부만 보던 때는 이 경로에서 대기 레코드가 생기지 않아, 승인 뒤
+     * 바뀐 지급액이 아무 확인 없이 확정되었다.
+     *
+     * <p>앞선 승인은 지우거나 되돌리지 않는다. 그 승인이 있었다는 사실은
+     * 그대로 이력이고, 새 대기 레코드가 다시 확정을 막는 것으로 충분하다.
      *
      * @param claim 대상 청구
      * @param rules 발동한 규칙 목록
      * @param actor 판정을 내린 심사자
      */
     private void recordRequiredInterventions(Claim claim, List<InterventionRule> rules, User actor) {
+        if (rules.isEmpty()) {
+            return;
+        }
+        List<Intervention> existing = interventionRepository.findAllByClaimId(claim.getId());
         for (InterventionRule rule : rules) {
-            if (interventionRepository.existsByClaimIdAndRuleId(claim.getId(), rule.getId())) {
+            List<Intervention> sameRule = existing.stream()
+                    .filter(intervention -> intervention.getInterventionRule() != null
+                            && intervention.getInterventionRule().getId().equals(rule.getId()))
+                    .toList();
+            if (sameRule.stream().anyMatch(Intervention::blocksDecision)) {
                 continue;
             }
             String reason = "규칙 " + rule.getCode() + "(" + rule.getName()
                     + ") 조건에 해당해 " + rule.getRequiredIntervention().getLabel() + "이 요구되었습니다.";
+            if (!sameRule.isEmpty()) {
+                reason += " 승인 이후 판정이 변경되어 다시 요구되었습니다.";
+            }
             interventionRepository.save(Intervention.required(claim, rule, reason, actor));
         }
     }
