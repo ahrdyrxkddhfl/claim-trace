@@ -75,11 +75,11 @@ public class ReviewController {
             description = """
                     판정을 저장하고, AI 권고와 다르면 개입 기록을 같은 트랜잭션에서 생성한다.
 
-                    검증: INV-2 판정 사유 · INV-3 오버라이드 사유 · INV-6 배정 확인 · INV-7 확정 여부 · INV-12 현재 판정 이관
+                    검증: INV-2 판정 사유 · 지급액과 판정·청구금액의 일치 · INV-3 오버라이드 사유 · INV-6 배정 확인 · INV-7 확정 여부 · INV-12 현재 판정 이관
                     """)
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "판정 저장 완료"),
-            @ApiResponse(responseCode = "400", description = "판정 사유 미기재 (E-1) · 오버라이드 사유 미기재 (E-2)"),
+            @ApiResponse(responseCode = "400", description = "판정 사유 미기재 (E-1) · 지급액 불일치 · 오버라이드 사유 미기재 (E-2)"),
             @ApiResponse(responseCode = "403", description = "타 심사자 배정 건 (E-5)"),
             @ApiResponse(responseCode = "409", description = "이미 확정된 청구 (E-6)")
     })

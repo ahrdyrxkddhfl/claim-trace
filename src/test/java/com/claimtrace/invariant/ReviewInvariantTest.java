@@ -13,7 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 판정 저장 경로의 불변조건 검증. INV-1 · 2 · 3 · 6 · 7 · 12.
+ * 판정 저장 경로의 불변조건 검증. INV-1 · 2 · 3 · 6 · 7 · 12, 그리고 지급액과 판정의 일치.
  *
  * <p>판정 저장은 우회 경로가 없는 단일 진입점이므로, 여기서 막히는 것은
  * 시스템 전체에서 막힌다.

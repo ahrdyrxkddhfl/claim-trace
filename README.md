@@ -153,12 +153,12 @@ INV-8과 INV-9는 예외 코드가 없다. 전자는 생성 자체를 막고, �
 "AI는 부지급을 권고했는데 일부지급으로 판정하셨습니다"를 화면에 그대로 띄울 수
 있다.
 
-### 테스트 79개
+### 테스트 82개
 
 ```
 DomainTransitionTest          26   엔티티 상태 전이와 생성 규칙 (Spring 없음)
 EvidenceInvariantTest         10   INV-6 · 7 · 11, D-3
-ReviewInvariantTest           10   INV-1 · 2 · 3 · 6 · 7 · 12, D-6 · D-7
+ReviewInvariantTest           13   INV-1 · 2 · 3 · 6 · 7 · 12, D-6 · D-7, 지급액
 RuleEvaluatorTest             10   D-5 개입 규칙 평가 (Spring 없음)
 DecisionInvariantTest         11   INV-4 · 10, 직무 분리, 승인 기록과 처리 이력
 ExplanationInvariantTest       5   INV-5 · 6 · 8 · 9
@@ -184,7 +184,7 @@ saveReview(ITEM_MANUAL_THERAPY, REVIEWER, """
 
 ## 4. 구현하면서 설계를 고친 것
 
-설계는 발표까지 마쳤지만 완결된 것은 아니었다. 구현이 검증 수단이 되어 다섯 가지
+설계는 발표까지 마쳤지만 완결된 것은 아니었다. 구현이 검증 수단이 되어 여섯 가지
 공백을 드러냈다.
 
 ### 승인의 행위자가 기록되지 않았다
@@ -259,6 +259,17 @@ INV-1은 모든 상태 전이에 행위자를 요구하고, 이 시스템의 전
 
 **오류가 아니라 침묵으로 나타나는 문제라 더 위험하다.** 근거를 만드는 시점에
 막았다.
+
+### 판정과 지급액의 관계가 없었다
+
+판정과 지급액은 별도 컬럼인데, 둘이 서로 맞아야 한다는 조건이 없었다. 청구금액
+24,000원 항목에 99,999,999원 지급, 부지급인데 144,000원, 일부지급인데 0원이 모두
+저장되었고, 확정의 지급 총액은 이 값을 그대로 더한다.
+
+판정을 저장할 때 세 가지를 막는다. 청구금액을 넘는 지급액, 금액이 있는 부지급,
+0원인 지급·일부지급이다. 지급도 자기부담을 공제하므로 청구금액보다 적을 수 있어,
+지급과 일부지급을 금액으로 구분하지는 않는다. 담보 한도는 청구 여러 건에 걸쳐
+쌓이는 값이라 이 검사에 넣지 않았다. 세 경우의 실패 테스트를 먼저 커밋하고 고쳤다.
 
 ---
 
@@ -420,7 +431,7 @@ Swagger UI에서 순서대로 실행하면 된다.
 ./gradlew test
 ```
 
-80개(불변조건 79 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
+83개(불변조건 82 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
 
 PostgreSQL 테스트는 Docker가 필요하다. Docker를 쓸 수 없으면 그 클래스만
 실패하고 나머지 검증에는 영향이 없다.
@@ -503,7 +514,7 @@ src/main/java/com/claimtrace/
 ├── service/       6개 — 불변조건 검증이 전부 여기 있다
 └── support/       ActorResolver
 
-src/test/java/com/claimtrace/invariant/    테스트 79개
+src/test/java/com/claimtrace/invariant/    테스트 82개
 ```
 
 컨트롤러는 불변조건을 검사하지 않는다. 같은 규칙을 컨트롤러마다 되풀이하면

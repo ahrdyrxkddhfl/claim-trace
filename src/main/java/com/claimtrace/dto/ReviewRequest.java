@@ -25,7 +25,8 @@ import jakarta.validation.constraints.PositiveOrZero;
  * 이것이 검증을 서비스에 두는 또 다른 이유다.
  *
  * @param decision 지급 판정
- * @param paidAmount 지급 결정액(원). 부지급이면 0
+ * @param paidAmount 지급 결정액(원). 부지급이면 0, 지급·일부지급이면 0보다 크고
+ *        청구금액 이하. 서비스가 검사한다
  * @param reason 판정 사유. 서비스가 공백 여부를 검사한다(INV-2)
  * @param overrideReasonType AI 권고와 다른 판정인 경우 필수(INV-3)
  * @param overrideReason 오버라이드 상세 사유. 유형과 함께 저장된다

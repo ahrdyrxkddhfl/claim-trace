@@ -17,6 +17,7 @@ import com.claimtrace.domain.Intervention;
 import com.claimtrace.domain.InterventionRule;
 import com.claimtrace.domain.Review;
 import com.claimtrace.domain.User;
+import com.claimtrace.domain.enums.ItemDecision;
 import com.claimtrace.dto.InterventionResponse;
 import com.claimtrace.dto.ReviewRequest;
 import com.claimtrace.dto.ReviewResponse;
@@ -40,6 +41,7 @@ import com.claimtrace.repository.ReviewRepository;
  *   <li>항목 행을 배타 잠금으로 읽는다 (INV-12)</li>
  *   <li>청구의 접근 조건을 확인한다 (INV-6, INV-7)</li>
  *   <li>판정 사유가 있는지 확인한다 (INV-2)</li>
+ *   <li>지급액이 판정·청구금액과 맞는지 확인한다</li>
  *   <li>최신 AI 권고와 판정을 비교한다 (D-7)</li>
  *   <li>다르면 오버라이드 사유가 있는지 확인한다 (INV-3)</li>
  *   <li>새 판정을 저장한다</li>
@@ -134,7 +136,8 @@ public class ReviewService {
      * @param actor 판정을 내리는 심사자
      * @return 저장된 판정. 오버라이드였다면 생성된 개입 기록을 함께 담는다
      * @throws ResourceNotFoundException 항목이 존재하지 않는 경우
-     * @throws InvariantViolationException INV-2 · INV-3 · INV-6 · INV-7 을 위반한 경우
+     * @throws InvariantViolationException INV-2 · INV-3 · INV-6 · INV-7 을 위반했거나
+     *         지급액이 판정·청구금액과 맞지 않는 경우
      */
     @Transactional
     public ReviewResponse save(Long itemId, ReviewRequest request, User actor) {
@@ -164,6 +167,10 @@ public class ReviewService {
         if (request.reason() == null || request.reason().isBlank()) {
             throw new InvariantViolationException(ErrorCode.REVIEW_REASON_REQUIRED);
         }
+
+        // 지급액이 판정·청구금액과 맞는지 확인한다. 확정의 지급 총액이 이 값을
+        // 그대로 더하므로 저장 시점에 막는다.
+        verifyPaidAmount(item, request);
 
         // D-7 — 최신 권고와 비교해 개입 여부를 시스템이 판별한다.
         AiRecommendation latest = aiRecommendationRepository.findLatestByItemId(itemId).orElse(null);
@@ -221,6 +228,33 @@ public class ReviewService {
         recordRequiredInterventions(claim, applicableRules, actor);
 
         return ReviewResponse.from(saved, interventionResponse);
+    }
+
+    /**
+     * 지급액이 판정과 청구금액에 맞는지 확인한다.
+     *
+     * <p>세 가지를 막는다. 청구금액을 넘는 지급액, 금액이 있는 부지급,
+     * 0원인 지급·일부지급이다. 지급은 자기부담을 공제하므로 청구금액보다
+     * 적을 수 있어, 지급과 일부지급을 금액으로 구분하지는 않는다.
+     *
+     * <p>음수는 요청 형식 검사({@code @PositiveOrZero})가 먼저 거른다. 지급액이
+     * 없으면 {@link Review} 가 저장하는 값과 같게 0 으로 본다.
+     *
+     * @param item 판정 대상 항목
+     * @param request 판정 내용
+     * @throws InvariantViolationException 지급액이 판정 또는 청구금액과 맞지 않는 경우
+     */
+    private void verifyPaidAmount(ClaimItem item, ReviewRequest request) {
+        int paid = request.paidAmount() == null ? 0 : request.paidAmount();
+        boolean consistent = paid <= item.getClaimedAmount()
+                && (request.decision() == ItemDecision.DENY ? paid == 0 : paid > 0);
+        if (!consistent) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("decision", request.decision().name());
+            details.put("paidAmount", paid);
+            details.put("claimedAmount", item.getClaimedAmount());
+            throw new InvariantViolationException(ErrorCode.PAID_AMOUNT_INCONSISTENT, details);
+        }
     }
 
     /**
