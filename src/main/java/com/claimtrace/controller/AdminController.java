@@ -64,9 +64,9 @@ public class AdminController {
             description = """
                     승인이 완료되어야 해당 청구를 확정할 수 있다 (INV-4).
 
-                    검증: 직무 분리(판정자 본인 승인 불가) · 승인 권한(정책의 approverRoles)
+                    검증: 직무 분리(판정자 본인 승인 불가) · 승인 권한(규칙의 approverRoles)
 
-                    한 청구에 여러 정책이 발동할 수 있으므로 대기 중인 개입을 일괄 처리하고 목록을 반환한다.
+                    한 청구에 여러 규칙이 발동할 수 있으므로 대기 중인 개입을 일괄 처리하고 목록을 반환한다.
                     """)
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "처리 완료"),

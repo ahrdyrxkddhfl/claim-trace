@@ -57,7 +57,7 @@ abstract class InvariantTestSupport {
     /** 진찰료. AI 권고 PAY. */
     protected static final long ITEM_CONSULT = 1L;
 
-    /** 도수치료. AI 권고 DENY, 보상제외 확률 0.82. 정책 두 개에 걸린다. */
+    /** 도수치료. AI 권고 DENY, 보상제외 확률 0.82. 규칙 두 개에 걸린다. */
     protected static final long ITEM_MANUAL_THERAPY = 2L;
 
     /** 체외충격파치료. AI 권고 PARTIAL. */
@@ -194,7 +194,7 @@ abstract class InvariantTestSupport {
      * 청구 1 의 네 항목을 모두 AI 권고와 같게 판정한다.
      *
      * <p>확정과 설명문 검증의 전제를 만든다. 권고와 같은 판정이므로 오버라이드
-     * 사유가 필요 없고, 개입 기록도 정책 발동분만 생성된다.
+     * 사유가 필요 없고, 개입 기록도 규칙 발동분만 생성된다.
      *
      * @throws Exception 요청 수행 중 오류
      */

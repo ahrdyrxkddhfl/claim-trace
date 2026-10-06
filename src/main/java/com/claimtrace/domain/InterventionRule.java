@@ -44,7 +44,7 @@ import lombok.NoArgsConstructor;
  * <p>본 구현이 지원하는 {@code field} 는 {@code claimedAmount},
  * {@code exclusionProbability}, {@code coverageType} 세 가지이고 {@code op} 는
  * {@code gte}, {@code lte}, {@code eq} 세 가지다. 기술서와 화면에 등장하는
- * 규칙은 이 조합으로 모두 표현된다. 범용 조건 평가기을 만드는 것은 이 프로젝트가
+ * 규칙은 이 조합으로 모두 표현된다. 범용 조건 평가기를 만드는 것은 이 프로젝트가
  * 증명하려는 명제와 무관하므로 의도적으로 넓히지 않았다.
  *
  * <p>JSON 을 DB 의 JSON 타입이 아니라 문자열로 저장한다. H2 와 PostgreSQL 의

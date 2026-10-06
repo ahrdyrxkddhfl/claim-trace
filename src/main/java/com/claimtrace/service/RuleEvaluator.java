@@ -27,7 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <p><b>지원 범위를 좁힌 것은 의도적이다.</b> 필드는 {@code claimedAmount},
  * {@code exclusionProbability}, {@code coverageType} 세 가지, 연산자는
  * {@code gte}, {@code lte}, {@code eq} 세 가지다. 기술서와 화면에 등장하는
- * 규칙은 이 조합으로 전부 표현된다. 범용 조건 평가기을 만드는 것은 이
+ * 규칙은 이 조합으로 전부 표현된다. 범용 조건 평가기를 만드는 것은 이
  * 시스템이 증명하려는 명제와 무관하고, 넓힐 때마다 검증할 조합이 늘어난다.
  * 새 필드를 더하는 일은 {@link #matches} 의 분기 하나를 추가하는 것이다.
  *
