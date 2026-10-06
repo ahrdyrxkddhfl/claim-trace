@@ -86,7 +86,8 @@
 **DBML은 갱신했다.** ERD는 데이터 모델을 보여주는 그림이라, 구현과 다른
 스키마를 그려두면 낡은 것이 아니라 틀린 것이 된다. 승인 기록 3컬럼 추가,
 `intervention_approvals` 테이블 추가, `intervention_rules` 테이블명 변경,
-`reviews.ai_recommendation_id` 추가가 반영되어 있다.
+`reviews.ai_recommendation_id`·`intervention_approvals.reviewed_review_ids` 추가가
+반영되어 있다.
 
 **구현된 API는 실행해서 확인할 수 있다.** 서버를 띄우면 Swagger UI가 구현된
 엔드포인트 9개를 정확한 스키마로 보여준다. 설계 명세(36개)와 구현 문서(9개)는
@@ -162,14 +163,14 @@ INV-8과 INV-9는 예외 코드가 없다. 전자는 생성 자체를 막고, �
 엔드포인트에도 닿지 않은 것이라 기본 형식으로 두었다. 실패 테스트를 먼저 커밋하고
 고쳤다.
 
-### 테스트 100개
+### 테스트 102개
 
 ```
 DomainTransitionTest          26   엔티티 상태 전이와 생성 규칙 (Spring 없음)
 EvidenceInvariantTest         14   INV-6 · 7 · 11, D-3, 공개 수준과 문구
 ReviewInvariantTest           15   INV-1 · 2 · 3 · 6 · 7 · 12, D-6 · D-7, 지급액
 RuleEvaluatorTest             10   D-5 개입 규칙 평가 (Spring 없음)
-DecisionInvariantTest         13   INV-4 · 10, 직무 분리, 승인 기록과 처리 이력, 재판정 요구
+DecisionInvariantTest         15   INV-4 · 10, 직무 분리, 승인 기록과 처리 이력, 재판정 요구
 ExplanationInvariantTest       5   INV-5 · 6 · 8 · 9
 ClaimWorkflowIntegrationTest   3   판정부터 설명문 초안까지 전체 흐름
 PostgresInvariantTest          3   INV-12 DB 제약 (Testcontainers)
@@ -250,9 +251,14 @@ INV-1은 모든 상태 전이에 행위자를 요구하고, 이 시스템의 전
 승인이 있었다는 것도 이력이고, 새 대기 개입이 확정을 다시 막는 것으로 충분하다.
 
 `DecisionInvariantTest`에 위 금액 그대로 실패하는 테스트를 먼저 커밋하고 고쳤다.
-남은 한계도 있다. 승인 기록이 어느 판정 버전을 보았는지 직접 가리키지 않아 시각으로만
-추론할 수 있고, 같은 내용으로 다시 저장해도 재승인을 요구한다. 판정 스냅샷은 11장의
-규칙 버전 고정과 같은 방식이라 그때 함께 다룬다.
+처음에는 남은 한계가 있었다. 승인 기록이 어느 판정 버전을 보았는지 직접 가리키지
+않아 시각으로만 추론할 수 있었고, 같은 내용으로 다시 저장해도 재승인을 요구했다.
+지금은 승인 기록(`intervention_approvals.reviewed_review_ids`)이 승인 당시의 현재
+판정을 가리키고, 판정을 다시 저장했을 때 항목별 판정·지급액·판정이 본 권고가
+마지막 승인 때와 모두 같으면 새 대기 개입을 만들지 않는다. 판정은 다시 저장하면
+새 행이 되므로 식별자가 아니라 내용으로 비교한다. 권고까지 비교하는 것은 판정이
+같아도 근거가 된 권고가 바뀌었다면 승인자가 본 상황과 다르기 때문이다. 이것도
+실패 테스트를 먼저 커밋하고 고쳤다.
 
 ### INV-7이 종결된 청구를 막지 않았다
 
@@ -491,7 +497,7 @@ Swagger UI에서 순서대로 실행하면 된다.
 ./gradlew test
 ```
 
-101개(불변조건 100 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
+103개(불변조건 102 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
 
 PostgreSQL 테스트는 Docker가 필요하다. Docker를 쓸 수 없으면 그 클래스만
 실패하고 나머지 검증에는 영향이 없다.
@@ -575,7 +581,7 @@ src/main/java/com/claimtrace/
 ├── service/       7개 — 불변조건 검증이 전부 여기 있다
 └── support/       ActorResolver
 
-src/test/java/com/claimtrace/invariant/    테스트 100개
+src/test/java/com/claimtrace/invariant/    테스트 102개
 ```
 
 컨트롤러는 불변조건을 검사하지 않는다. 같은 규칙을 컨트롤러마다 되풀이하면

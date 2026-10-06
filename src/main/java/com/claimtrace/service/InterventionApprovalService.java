@@ -120,6 +120,11 @@ public class InterventionApprovalService {
         verifySegregationOfDuties(claim, actor);
         pending.forEach(intervention -> verifyApproverRole(intervention, actor));
 
+        // 승인은 이 시점의 판정을 확인한 것이다. 무엇을 보았는지 이력에 남긴다.
+        List<Long> reviewedReviewIds = reviewRepository.findCurrentByClaimId(claimId).stream()
+                .map(Review::getId)
+                .toList();
+
         LocalDateTime now = LocalDateTime.now();
         pending.forEach(intervention -> {
             // 현재 상태를 갱신한다. INV-4 의 검사 대상은 그대로 이 필드들이다.
@@ -127,7 +132,7 @@ public class InterventionApprovalService {
             // 같은 트랜잭션에서 처리 이력을 더한다. 반려 뒤 승인이 들어와도
             // 앞 처리가 지워지지 않는다.
             interventionApprovalRepository.save(InterventionApproval.of(
-                    intervention, request.approved(), actor, now, request.note()));
+                    intervention, request.approved(), actor, now, request.note(), reviewedReviewIds));
         });
 
         // 방금 더한 행까지 포함해 이력을 읽어 응답에 싣는다. 이력 조회

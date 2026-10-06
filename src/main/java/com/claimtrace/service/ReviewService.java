@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import com.claimtrace.domain.AiRecommendation;
 import com.claimtrace.domain.Claim;
 import com.claimtrace.domain.ClaimItem;
 import com.claimtrace.domain.Intervention;
+import com.claimtrace.domain.InterventionApproval;
 import com.claimtrace.domain.InterventionRule;
 import com.claimtrace.domain.Review;
 import com.claimtrace.domain.User;
@@ -26,6 +28,7 @@ import com.claimtrace.exception.InvariantViolationException;
 import com.claimtrace.exception.ResourceNotFoundException;
 import com.claimtrace.repository.AiRecommendationRepository;
 import com.claimtrace.repository.ClaimItemRepository;
+import com.claimtrace.repository.InterventionApprovalRepository;
 import com.claimtrace.repository.InterventionRuleRepository;
 import com.claimtrace.repository.InterventionRepository;
 import com.claimtrace.repository.ReviewRepository;
@@ -99,6 +102,7 @@ public class ReviewService {
     private final AiRecommendationRepository aiRecommendationRepository;
     private final InterventionRepository interventionRepository;
     private final InterventionRuleRepository interventionRuleRepository;
+    private final InterventionApprovalRepository interventionApprovalRepository;
     private final RuleEvaluator ruleEvaluator;
 
     /**
@@ -109,6 +113,7 @@ public class ReviewService {
      * @param aiRecommendationRepository AI 권고 조회
      * @param interventionRepository 개입 기록 저장
      * @param interventionRuleRepository 개입 규칙 조회
+     * @param interventionApprovalRepository 승인이 본 판정 조회
      * @param ruleEvaluator 규칙 발동 조건 평가
      */
     public ReviewService(ClaimItemRepository claimItemRepository,
@@ -116,12 +121,14 @@ public class ReviewService {
                          AiRecommendationRepository aiRecommendationRepository,
                          InterventionRepository interventionRepository,
                          InterventionRuleRepository interventionRuleRepository,
+                         InterventionApprovalRepository interventionApprovalRepository,
                          RuleEvaluator ruleEvaluator) {
         this.claimItemRepository = claimItemRepository;
         this.reviewRepository = reviewRepository;
         this.aiRecommendationRepository = aiRecommendationRepository;
         this.interventionRepository = interventionRepository;
         this.interventionRuleRepository = interventionRuleRepository;
+        this.interventionApprovalRepository = interventionApprovalRepository;
         this.ruleEvaluator = ruleEvaluator;
     }
 
@@ -308,6 +315,10 @@ public class ReviewService {
      * 존재 여부만 보던 때는 이 경로에서 대기 레코드가 생기지 않아, 승인 뒤
      * 바뀐 지급액이 아무 확인 없이 확정되었다.
      *
+     * <p>다만 판정 내용이 마지막 승인이 본 판정과 같으면 새로 만들지 않는다.
+     * 승인 기록이 그때의 판정을 가리키므로(INV-1 의 행위 기록과 같은 방식)
+     * 같은 내용의 재저장인지 판별할 수 있다.
+     *
      * <p>앞선 승인은 지우거나 되돌리지 않는다. 그 승인이 있었다는 사실은
      * 그대로 이력이고, 새 대기 레코드가 다시 확정을 막는 것으로 충분하다.
      *
@@ -326,6 +337,9 @@ public class ReviewService {
                             && intervention.getInterventionRule().getId().equals(rule.getId()))
                     .toList();
             if (sameRule.stream().anyMatch(Intervention::blocksDecision)) {
+                continue;
+            }
+            if (!sameRule.isEmpty() && matchesLastApproval(claim, sameRule)) {
                 continue;
             }
             String reason = "규칙 " + rule.getCode() + "(" + rule.getName()
@@ -367,6 +381,63 @@ public class ReviewService {
         return reviewRepository.findHistoryByItemId(itemId).stream()
                 .map(ReviewResponse::from)
                 .toList();
+    }
+
+    /**
+     * 청구의 현재 판정이 마지막 승인이 본 판정과 내용이 같은지 판별한다.
+     *
+     * <p>판정은 다시 저장하면 새 행이 되므로 식별자가 아니라 내용으로 비교한다.
+     * 내용은 항목별 판정·지급액·판정이 본 권고다. 권고까지 넣는 것은 판정이
+     * 같아도 근거가 된 권고가 바뀌었다면 승인자가 본 상황과 다르기 때문이다.
+     * 승인 기록에 판정이 남지 않은 이력이면 비교할 수 없으므로 다르다고 본다.
+     *
+     * @param claim 대상 청구
+     * @param sameRule 같은 규칙의 개입. 모두 승인된 상태여야 한다
+     * @return 내용이 같으면 {@code true}
+     */
+    private boolean matchesLastApproval(Claim claim, List<Intervention> sameRule) {
+        List<InterventionApproval> approvals = interventionApprovalRepository.findAllByInterventionIds(
+                sameRule.stream().map(Intervention::getId).toList());
+        Optional<InterventionApproval> lastApproval = approvals.stream()
+                .filter(InterventionApproval::isApproved)
+                .reduce((first, second) -> second);
+        if (lastApproval.isEmpty() || lastApproval.get().reviewedReviewIdList().isEmpty()) {
+            return false;
+        }
+        Set<ReviewContent> approved = reviewRepository
+                .findAllById(lastApproval.get().reviewedReviewIdList()).stream()
+                .map(ReviewContent::of)
+                .collect(Collectors.toSet());
+        Set<ReviewContent> current = reviewRepository.findCurrentByClaimId(claim.getId()).stream()
+                .map(ReviewContent::of)
+                .collect(Collectors.toSet());
+        return approved.equals(current);
+    }
+
+    /**
+     * 승인 여부를 가르는 판정 내용.
+     *
+     * @param claimItemId 항목 식별자
+     * @param decision 판정
+     * @param paidAmount 지급액
+     * @param aiRecommendationId 판정이 본 권고. 없으면 {@code null}
+     */
+    private record ReviewContent(Long claimItemId, ItemDecision decision, Integer paidAmount,
+                                 Long aiRecommendationId) {
+
+        /**
+         * 판정에서 비교할 내용만 꺼낸다.
+         *
+         * @param review 판정
+         * @return 비교용 내용
+         */
+        static ReviewContent of(Review review) {
+            return new ReviewContent(
+                    review.getClaimItem().getId(),
+                    review.getDecision(),
+                    review.getPaidAmount(),
+                    review.getAiRecommendation() == null ? null : review.getAiRecommendation().getId());
+        }
     }
 
     /**

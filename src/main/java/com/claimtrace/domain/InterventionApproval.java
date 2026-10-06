@@ -1,6 +1,9 @@
 package com.claimtrace.domain;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -85,13 +88,26 @@ public class InterventionApproval {
     @Column(nullable = false, updatable = false)
     private LocalDateTime approvedAt;
 
+    /**
+     * 처리 당시 청구의 현재 판정 식별자. 콤마로 구분해 오름차순으로 담는다.
+     *
+     * <p>승인은 승인 당시의 판정을 확인한 것이다. 그 판정이 무엇이었는지를
+     * 시각으로 추론하지 않고 직접 가리키게 한다. 판정을 다시 저장할 때 내용이
+     * 이 판정들과 같으면 재승인을 요구하지 않는다. 이 컬럼이 생기기 전의
+     * 이력은 {@code null} 이며, 그때는 내용을 비교할 수 없어 재승인을 요구한다.
+     */
+    @Column(columnDefinition = "text")
+    private String reviewedReviewIds;
+
     private InterventionApproval(Intervention intervention, boolean approved,
-                                 User approver, LocalDateTime approvedAt, String note) {
+                                 User approver, LocalDateTime approvedAt, String note,
+                                 String reviewedReviewIds) {
         this.intervention = intervention;
         this.approved = approved;
         this.approver = approver;
         this.approvedAt = approvedAt;
         this.note = note;
+        this.reviewedReviewIds = reviewedReviewIds;
     }
 
     /**
@@ -102,10 +118,30 @@ public class InterventionApproval {
      * @param approver 처리를 수행한 사용자
      * @param approvedAt 처리 시각
      * @param note 처리 사유. 없으면 {@code null}
+     * @param reviewedReviewIds 처리 당시 청구의 현재 판정 식별자
      * @return 저장 전의 이력 행
      */
     public static InterventionApproval of(Intervention intervention, boolean approved,
-                                          User approver, LocalDateTime approvedAt, String note) {
-        return new InterventionApproval(intervention, approved, approver, approvedAt, note);
+                                          User approver, LocalDateTime approvedAt, String note,
+                                          List<Long> reviewedReviewIds) {
+        String joined = reviewedReviewIds.stream()
+                .sorted()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        return new InterventionApproval(intervention, approved, approver, approvedAt, note, joined);
+    }
+
+    /**
+     * 처리 당시 청구의 현재 판정 식별자를 목록으로 돌려준다.
+     *
+     * @return 오름차순 판정 식별자. 기록이 없던 이력이면 빈 목록
+     */
+    public List<Long> reviewedReviewIdList() {
+        if (reviewedReviewIds == null || reviewedReviewIds.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(reviewedReviewIds.split(","))
+                .map(Long::valueOf)
+                .toList();
     }
 }

@@ -11,6 +11,7 @@ import com.claimtrace.domain.Intervention;
 import com.claimtrace.domain.InterventionApproval;
 import com.claimtrace.repository.InterventionApprovalRepository;
 import com.claimtrace.repository.InterventionRepository;
+import com.claimtrace.repository.ReviewRepository;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,6 +36,9 @@ class DecisionInvariantTest extends InvariantTestSupport {
 
     @Autowired
     private InterventionApprovalRepository interventionApprovalRepository;
+
+    @Autowired
+    private ReviewRepository reviewRepository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -329,8 +333,8 @@ class DecisionInvariantTest extends InvariantTestSupport {
                 .andExpect(jsonPath("$.details.claimItemIds[0]").value(ITEM_MANUAL_THERAPY));
 
         // 다시 판정하면 판정 저장이 새 확률로 규칙을 평가해 P-03 승인을 요구한다.
-        // P-07 도 다시 요구되는 것은 승인 뒤의 판정 저장이 내용과 무관하게
-        // 재승인을 요구하기 때문이다(README 4장 '승인 뒤 판정을 바꿔도').
+        // P-07 도 다시 요구된다. 판정 값은 같아도 도수치료의 판정이 본 권고가
+        // 승인 때와 달라져, 승인자가 확인한 상황이 아니기 때문이다.
         saveReview(ITEM_MANUAL_THERAPY, REVIEWER, """
                 {"decision":"DENY","paidAmount":0,"reason":"의학적 타당성이 확인되지 않는다."}
                 """).andExpect(status().isCreated());
@@ -383,5 +387,21 @@ class DecisionInvariantTest extends InvariantTestSupport {
         decide(CLAIM_IN_REVIEW, REVIEWER)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("DECIDED"));
+    }
+    @Test
+    @DisplayName("승인 기록은 승인 당시의 현재 판정을 가리킨다")
+    void 승인_기록은_승인_당시의_현재_판정을_가리킨다() throws Exception {
+        reviewAllItemsFollowingAi();
+        resolveDualCheck(CLAIM_IN_REVIEW, MANAGER, """
+                {"approved":true,"note":"확인했다."}
+                """).andExpect(status().isOk());
+
+        List<Long> currentReviewIds = reviewRepository.findCurrentByClaimId(CLAIM_IN_REVIEW).stream()
+                .map(review -> review.getId())
+                .sorted()
+                .toList();
+        List<InterventionApproval> approvals = interventionApprovalRepository.findAll();
+        assertFalse(approvals.isEmpty());
+        approvals.forEach(approval -> assertEquals(currentReviewIds, approval.reviewedReviewIdList()));
     }
 }

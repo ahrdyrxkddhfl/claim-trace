@@ -394,6 +394,7 @@ Table intervention_approvals {
   approver_id     bigint    [not null, ref: > users.id, note: 'INV-1']
   note            text      [note: '처리 사유. 반려 시 기재 권장']
   approved_at     timestamp [not null, note: 'interventions 의 현재 상태와 같은 시각이 찍힌다']
+  reviewed_review_ids text  [note: '처리 당시 청구의 현재 판정 id. 콤마 구분. 같은 내용 재저장 시 재승인 면제 판별에 쓴다']
 
   Note: '''
   개입 요구에 대한 처리 이력. 구현 중 추가.
