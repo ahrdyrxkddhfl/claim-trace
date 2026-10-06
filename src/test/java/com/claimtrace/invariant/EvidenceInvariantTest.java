@@ -118,6 +118,26 @@ class EvidenceInvariantTest extends InvariantTestSupport {
     }
 
     @Test
+    @DisplayName("고객용 문구가 없는 근거는 상태 변경으로도 고객용이 될 수 없다")
+    void 고객용_문구가_없는_근거는_상태_변경으로도_고객용이_될_수_없다() throws Exception {
+        // AI 근거 3 은 내부용이고 고객용 문구가 없다. 상태 변경 요청에는 문구를
+        // 채울 필드가 없으므로, 고객용으로 바꾸면 설명문에서 조용히 걸러진다.
+        changeEvidenceStatus(EVIDENCE_THERAPY_AI, REVIEWER, """
+                {"status":"ADOPTED","disclosureLevel":"CUSTOMER"}
+                """)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CUSTOMER_CONTENT_REQUIRED"));
+
+        // 거부된 요청이 채택이나 공개 수준을 일부라도 바꿔 두면 안 된다.
+        findEvidences(ITEM_MANUAL_THERAPY)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == " + EVIDENCE_THERAPY_AI + ")].status")
+                        .value("GENERATED"))
+                .andExpect(jsonPath("$[?(@.id == " + EVIDENCE_THERAPY_AI + ")].disclosureLevel")
+                        .value("INTERNAL"));
+    }
+
+    @Test
     @DisplayName("다른 청구의 서류는 근거로 지목할 수 없다")
     void 다른_청구의_서류는_근거로_지목할_수_없다() throws Exception {
         // 서류 4는 확정된 청구 2에 속한다. 청구 1의 항목에 연결하면
