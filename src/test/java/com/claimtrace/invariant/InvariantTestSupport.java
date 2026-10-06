@@ -183,11 +183,26 @@ abstract class InvariantTestSupport {
      * 항목의 근거 카드 목록을 조회한다.
      *
      * @param itemId 항목 식별자
+     * @param actorId 행위자 식별자
      * @return 응답 검증을 이어갈 수 있는 결과
      * @throws Exception 요청 수행 중 오류
      */
-    protected ResultActions findEvidences(long itemId) throws Exception {
-        return mockMvc.perform(get("/claim-items/{itemId}/evidences", itemId));
+    protected ResultActions findEvidences(long itemId, long actorId) throws Exception {
+        return mockMvc.perform(get("/claim-items/{itemId}/evidences", itemId)
+                .header("X-Actor-Id", actorId));
+    }
+
+    /**
+     * 항목의 판정 이력을 조회한다.
+     *
+     * @param itemId 항목 식별자
+     * @param actorId 행위자 식별자
+     * @return 응답 검증을 이어갈 수 있는 결과
+     * @throws Exception 요청 수행 중 오류
+     */
+    protected ResultActions findReviews(long itemId, long actorId) throws Exception {
+        return mockMvc.perform(get("/claim-items/{itemId}/reviews", itemId)
+                .header("X-Actor-Id", actorId));
     }
 
     /**

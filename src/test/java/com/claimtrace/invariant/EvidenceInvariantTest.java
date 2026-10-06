@@ -3,6 +3,7 @@ package com.claimtrace.invariant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -39,7 +40,7 @@ class EvidenceInvariantTest extends InvariantTestSupport {
                 .andExpect(jsonPath("$.decidedBy").value("김영희"));
 
         // 기각한 근거가 목록에서 사라지지 않아야 한다. 사라지면 보존의 의미가 없다.
-        findEvidences(ITEM_MANUAL_THERAPY)
+        findEvidences(ITEM_MANUAL_THERAPY, REVIEWER)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == " + EVIDENCE_THERAPY_RULE + ")].status")
                         .value("REJECTED"));
@@ -64,6 +65,26 @@ class EvidenceInvariantTest extends InvariantTestSupport {
                 """)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.invariant").value("INV-6"));
+    }
+
+    @Test
+    @DisplayName("INV-6 배정되지 않은 심사자는 근거 목록을 조회할 수 없다")
+    void 배정되지_않은_심사자는_근거_목록을_조회할_수_없다() throws Exception {
+        // 목록에는 내부용 문구와 AI 기여도가 들어 있다. 쓰기만 막고 읽기를 열어 두면
+        // 배정되지 않은 심사자도 같은 정보를 그대로 본다.
+        findEvidences(ITEM_MANUAL_THERAPY, OTHER_REVIEWER)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CLAIM_NOT_ASSIGNED"))
+                .andExpect(jsonPath("$.invariant").value("INV-6"));
+    }
+
+    @Test
+    @DisplayName("행위자 헤더 없이 근거 목록을 조회할 수 없다")
+    void 행위자_헤더_없이_근거_목록을_조회할_수_없다() throws Exception {
+        mockMvc.perform(get("/claim-items/{itemId}/evidences", ITEM_MANUAL_THERAPY))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.details.header").value("X-Actor-Id"));
     }
 
     @Test
@@ -129,7 +150,7 @@ class EvidenceInvariantTest extends InvariantTestSupport {
                 .andExpect(jsonPath("$.code").value("CUSTOMER_CONTENT_REQUIRED"));
 
         // 거부된 요청이 채택이나 공개 수준을 일부라도 바꿔 두면 안 된다.
-        findEvidences(ITEM_MANUAL_THERAPY)
+        findEvidences(ITEM_MANUAL_THERAPY, REVIEWER)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == " + EVIDENCE_THERAPY_AI + ")].status")
                         .value("GENERATED"))

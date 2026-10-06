@@ -151,7 +151,7 @@ class ClaimWorkflowIntegrationTest extends InvariantTestSupport {
 
         // 그러나 근거 자체는 사유와 함께 보존된다 (D-3). 이의제기 재검토 시
         // "무엇을 검토했고 왜 배제했는가"에 답할 수 있어야 한다.
-        findEvidences(ITEM_MANUAL_THERAPY)
+        findEvidences(ITEM_MANUAL_THERAPY, REVIEWER)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == " + EVIDENCE_THERAPY_RULE + ")].status")
                         .value("REJECTED"))

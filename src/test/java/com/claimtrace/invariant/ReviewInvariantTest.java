@@ -155,6 +155,15 @@ class ReviewInvariantTest extends InvariantTestSupport {
     }
 
     @Test
+    @DisplayName("INV-6 배정되지 않은 심사자는 판정 이력을 조회할 수 없다")
+    void 배정되지_않은_심사자는_판정_이력을_조회할_수_없다() throws Exception {
+        findReviews(ITEM_CONSULT, OTHER_REVIEWER)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CLAIM_NOT_ASSIGNED"))
+                .andExpect(jsonPath("$.invariant").value("INV-6"));
+    }
+
+    @Test
     @DisplayName("INV-7 확정된 청구의 항목은 다시 판정할 수 없다")
     void 확정된_청구의_항목은_다시_판정할_수_없다() throws Exception {
         // 청구 2 는 시드에서 이미 DECIDED 다. 항목 5 가 그 청구에 속한다.
