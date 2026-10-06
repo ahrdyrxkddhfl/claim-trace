@@ -71,6 +71,56 @@ class ReviewInvariantTest extends InvariantTestSupport {
     }
 
     @Test
+    @DisplayName("청구금액보다 큰 지급액은 저장할 수 없다")
+    void 청구금액보다_큰_지급액은_저장할_수_없다() throws Exception {
+        // 진찰료의 청구금액은 24,000원이다. 확정의 지급 총액은 판정의
+        // 지급액을 그대로 더하므로, 여기서 막지 않으면 그 값이 확정된다.
+        saveReview(ITEM_CONSULT, REVIEWER, """
+                {"decision":"PAY","paidAmount":99999999,"reason":"부정 근거가 확인되지 않는다."}
+                """)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PAID_AMOUNT_INCONSISTENT"))
+                .andExpect(jsonPath("$.details.claimedAmount").value(24000))
+                .andExpect(jsonPath("$.details.paidAmount").value(99999999));
+
+        assertTrue(reviewRepository.findCurrentByItemId(ITEM_CONSULT).isEmpty(),
+                "거부된 판정은 저장되지 않아야 한다");
+    }
+
+    @Test
+    @DisplayName("부지급 판정에 지급액이 있으면 저장할 수 없다")
+    void 부지급_판정에_지급액이_있으면_저장할_수_없다() throws Exception {
+        // 도수치료의 AI 권고도 DENY 라 오버라이드 사유 없이 금액 검사에 도달한다.
+        saveReview(ITEM_MANUAL_THERAPY, REVIEWER, """
+                {"decision":"DENY","paidAmount":144000,"reason":"의학적 타당성이 확인되지 않는다."}
+                """)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PAID_AMOUNT_INCONSISTENT"))
+                .andExpect(jsonPath("$.details.decision").value("DENY"))
+                .andExpect(jsonPath("$.details.paidAmount").value(144000));
+
+        assertTrue(reviewRepository.findCurrentByItemId(ITEM_MANUAL_THERAPY).isEmpty(),
+                "거부된 판정은 저장되지 않아야 한다");
+    }
+
+    @Test
+    @DisplayName("일부지급 판정에 지급액이 0원이면 저장할 수 없다")
+    void 일부지급_판정에_지급액이_0원이면_저장할_수_없다() throws Exception {
+        // 체외충격파의 AI 권고는 PARTIAL 이다. 0원 일부지급은 실질이 부지급인데
+        // 판정은 부지급이 아니므로, 고객 설명과 집계가 서로 다른 말을 하게 된다.
+        saveReview(ITEM_SHOCKWAVE, REVIEWER, """
+                {"decision":"PARTIAL","paidAmount":0,"reason":"선행 보존치료 기록이 일부만 확인된다."}
+                """)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PAID_AMOUNT_INCONSISTENT"))
+                .andExpect(jsonPath("$.details.decision").value("PARTIAL"))
+                .andExpect(jsonPath("$.details.paidAmount").value(0));
+
+        assertTrue(reviewRepository.findCurrentByItemId(ITEM_SHOCKWAVE).isEmpty(),
+                "거부된 판정은 저장되지 않아야 한다");
+    }
+
+    @Test
     @DisplayName("D-7 권고를 뒤집으면 선언 없이도 개입이 기록된다")
     void 권고를_뒤집으면_선언_없이도_개입이_기록된다() throws Exception {
         // 요청 어디에도 '개입'을 선언하는 필드가 없다. 시스템이 비교해 판별한다.
