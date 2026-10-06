@@ -193,6 +193,20 @@ abstract class InvariantTestSupport {
     }
 
     /**
+     * AI 모델의 권고를 전달한다. 행위자 헤더가 없는 외부시스템 경로다.
+     *
+     * @param claimId 청구 식별자
+     * @param body 요청 본문 JSON
+     * @return 응답 검증을 이어갈 수 있는 결과
+     * @throws Exception 요청 수행 중 오류
+     */
+    protected ResultActions submitRecommendations(long claimId, String body) throws Exception {
+        return mockMvc.perform(post("/external/claims/{claimId}/recommendations", claimId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    /**
      * 항목의 판정 이력을 조회한다.
      *
      * @param itemId 항목 식별자

@@ -1021,6 +1021,7 @@ paths:
       description: |
         AI 심사 모델이 항목별 보상제외 확률과 기여도를 전달한다.
         `ai_recommendations`와 `evidences`(source = AI)를 생성한다.
+        권고 값(`recommendation`)은 확률과 임계값으로 계산되지 않으므로 모델이 직접 보낸다.
 
         **이 엔드포인트는 판정을 확정하지 않는다 (INV-13).**
         `reviews`, `interventions`, `claims.status`에 접근할 수 없다.
@@ -1042,10 +1043,11 @@ paths:
                   type: array
                   items:
                     type: object
-                    required: [claimItemId, exclusionProbability, contributions]
+                    required: [claimItemId, exclusionProbability, recommendation, contributions]
                     properties:
                       claimItemId: { type: integer, format: int64 }
                       exclusionProbability: { type: number, format: double }
+                      recommendation: { $ref: '#/components/schemas/ItemDecision' }
                       contributions:
                         type: array
                         description: 항목별 새플리 기여도

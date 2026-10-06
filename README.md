@@ -89,7 +89,7 @@
 반영되어 있다.
 
 **구현된 API는 실행해서 확인할 수 있다.** 서버를 띄우면 Swagger UI가 구현된
-엔드포인트 8개를 정확한 스키마로 보여준다. 설계 명세(36개)와 구현 문서(8개)는
+엔드포인트 9개를 정확한 스키마로 보여준다. 설계 명세(36개)와 구현 문서(9개)는
 역할이 다르므로 둘 다 둔다.
 
 ---
@@ -161,7 +161,7 @@ INV-8과 INV-9는 예외 코드가 없다. 전자는 생성 자체를 막고, �
 엔드포인트에도 닿지 않은 것이라 기본 형식으로 두었다. 실패 테스트를 먼저 커밋하고
 고쳤다.
 
-### 테스트 91개
+### 테스트 98개
 
 ```
 DomainTransitionTest          26   엔티티 상태 전이와 생성 규칙 (Spring 없음)
@@ -174,6 +174,7 @@ ClaimWorkflowIntegrationTest   3   판정부터 설명문 초안까지 전체 �
 PostgresInvariantTest          3   INV-12 DB 제약 (Testcontainers)
 ConcurrencyInvariantTest       1   INV-12 동시 요청
 ErrorResponseFormatTest        3   요청 형식 오류의 공통 오류 형식
+RecommendationIntakeTest       7   INV-7 · 13, D-4 AI 권고 수신
 ```
 
 테스트는 HTTP 상태 코드만 보지 않는다. 응답의 `code`와 `invariant`까지 확인한다.
@@ -293,6 +294,14 @@ INV-6은 "모든 조회·수정 API에서 소유권 검사"라고 규정했지�
 문구 필드가 없으므로 근거가 이미 가진 문구로 판단하고, 채택·기각보다 먼저 검사해
 거부된 요청이 상태를 일부만 바꿔 두지 않게 했다. 같은 규칙을 두 경로에 따로 두면
 한쪽에만 남는다는 것을 보여준 사례다. 실패 테스트를 먼저 커밋하고 고쳤다.
+
+### AI 권고 값의 출처가 없었다
+
+AI 권고 수신 명세는 항목별 확률과 임계값만 받는데, 권고(지급·일부지급·부지급)는
+그 둘로 계산되지 않는다. 시드만 봐도 임계값 0.3에서 0.61은 일부지급, 0.82는
+부지급이다. 시스템이 확률 구간으로 권고를 만들어 내면 모델이 내리지 않은 판단이
+모델의 권고로 기록되고, INV-3의 오버라이드 판별이 그 가짜 권고를 기준으로 돈다.
+요청에 `recommendation`을 추가해 모델이 보낸 값을 그대로 저장한다.
 
 ### 판정과 지급액의 관계가 없었다
 
@@ -465,7 +474,7 @@ Swagger UI에서 순서대로 실행하면 된다.
 ./gradlew test
 ```
 
-92개(불변조건 91 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
+99개(불변조건 98 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
 
 PostgreSQL 테스트는 Docker가 필요하다. Docker를 쓸 수 없으면 그 클래스만
 실패하고 나머지 검증에는 영향이 없다.
@@ -474,7 +483,7 @@ PostgreSQL 테스트는 Docker가 필요하다. Docker를 쓸 수 없으면 그 
 
 ## 8. 구현 범위와 제외 범위
 
-**설계 36개 중 엔드포인트 8개를 구현했다.** 전부 만들면 CRUD가 백 개를 넘고
+**설계 36개 중 엔드포인트 9개를 구현했다.** 전부 만들면 CRUD가 백 개를 넘고
 각각이 얕아진다. 규제 대응의 핵심 경로에 집중했다.
 
 ### 구현한 엔드포인트
@@ -489,6 +498,7 @@ PostgreSQL 테스트는 Docker가 필요하다. Docker를 쓸 수 없으면 그 
 | `POST /claims/{claimId}/decision` | INV-4 · 6 · 10 |
 | `POST /claims/{claimId}/explanations/draft` | INV-5 · 6 · 9 |
 | `PUT /admin/claims/{claimId}/dual-check` | INV-4, 직무 분리 |
+| `POST /external/claims/{claimId}/recommendations` | INV-7 · 13, D-4 |
 
 ### 제외한 것
 
@@ -540,15 +550,15 @@ Gradle
 ```
 src/main/java/com/claimtrace/
 ├── config/        OpenAPI 문서 구성
-├── controller/    4개 — 요청 수신과 행위자 결정만 한다
+├── controller/    5개 — 요청 수신과 행위자 결정만 한다
 ├── domain/        엔티티 16개 + Enum 15개
 ├── dto/           요청·응답 스키마
 ├── exception/     오류 코드, 전역 예외 처리
 ├── repository/    11개
-├── service/       6개 — 불변조건 검증이 전부 여기 있다
+├── service/       7개 — 불변조건 검증이 전부 여기 있다
 └── support/       ActorResolver
 
-src/test/java/com/claimtrace/invariant/    테스트 91개
+src/test/java/com/claimtrace/invariant/    테스트 98개
 ```
 
 컨트롤러는 불변조건을 검사하지 않는다. 같은 규칙을 컨트롤러마다 되풀이하면
