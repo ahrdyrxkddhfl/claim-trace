@@ -212,14 +212,26 @@ public class EvidenceService {
      * 하단에 채택된 부정 근거 수를 표시해 INV-5 충족 여부를 미리 알리기
      * 때문이다.
      *
+     * <p>내부용 문구와 AI 기여도가 들어 있으므로 배정 심사자와 심사관리자만
+     * 조회할 수 있다(INV-6). 확정된 청구도 조회는 막지 않는다.
+     *
      * @param itemId 항목 식별자
+     * @param actor 조회하는 사용자
      * @return 생성 순서의 근거 목록
      * @throws ResourceNotFoundException 항목이 존재하지 않는 경우
+     * @throws InvariantViolationException 조회 권한이 없는 경우(INV-6)
      */
     @Transactional(readOnly = true)
-    public List<EvidenceResponse> findByItem(Long itemId) {
-        if (claimItemRepository.findWithClaim(itemId).isEmpty()) {
-            throw new ResourceNotFoundException("claimItem", itemId);
+    public List<EvidenceResponse> findByItem(Long itemId, User actor) {
+        ClaimItem item = claimItemRepository.findWithClaim(itemId)
+                .orElseThrow(() -> new ResourceNotFoundException("claimItem", itemId));
+        Claim claim = item.getClaim();
+        if (!claim.isReadableBy(actor)) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("claimItemId", itemId);
+            details.put("claimNo", claim.getClaimNo());
+            details.put("actorId", actor.getId());
+            throw new InvariantViolationException(ErrorCode.CLAIM_NOT_ASSIGNED, details);
         }
         return evidenceRepository.findAllByItemId(itemId).stream()
                 .map(EvidenceResponse::from)

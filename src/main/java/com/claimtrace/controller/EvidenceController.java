@@ -87,18 +87,28 @@ public class EvidenceController {
      * 항목의 근거 카드 목록을 조회한다.
      *
      * @param itemId 항목 식별자
+     * @param actorId 조회하는 사용자 식별자
      * @return 200 과 근거 목록
      */
     @GetMapping("/claim-items/{itemId}/evidences")
     @Operation(
             summary = "근거 카드 목록",
-            description = "내부용 근거와 기각된 근거를 포함한 전체 근거를 반환한다. 심사자용 응답이다.")
+            description = """
+                    내부용 근거와 기각된 근거를 포함한 전체 근거를 반환한다. 심사자용 응답이다.
+
+                    검증: INV-6 배정 심사자 또는 심사관리자
+                    """)
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "403", description = "타 심사자 배정 건 (E-5)"),
             @ApiResponse(responseCode = "404", description = "대상 항목 없음")
     })
-    public ResponseEntity<List<EvidenceResponse>> findByItem(@PathVariable Long itemId) {
-        return ResponseEntity.ok(evidenceService.findByItem(itemId));
+    public ResponseEntity<List<EvidenceResponse>> findByItem(
+            @PathVariable Long itemId,
+            @RequestHeader("X-Actor-Id") Long actorId) {
+
+        User actor = actorResolver.resolve(actorId);
+        return ResponseEntity.ok(evidenceService.findByItem(itemId, actor));
     }
 
     /**

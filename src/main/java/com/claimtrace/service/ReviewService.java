@@ -342,14 +342,26 @@ public class ReviewService {
      * <p>대체된 판정도 모두 포함한다. 이의제기로 판정이 뒤집힌 경우 최초에
      * 왜 그렇게 판단했는지가 이 목록에 남아 있다(D-6).
      *
+     * <p>배정 심사자와 심사관리자만 조회할 수 있다(INV-6). 근거 목록 조회와
+     * 같은 기준이다.
+     *
      * @param itemId 항목 식별자
+     * @param actor 조회하는 사용자
      * @return 판정 시각 내림차순의 판정 목록
      * @throws ResourceNotFoundException 항목이 존재하지 않는 경우
+     * @throws InvariantViolationException 조회 권한이 없는 경우(INV-6)
      */
     @Transactional(readOnly = true)
-    public List<ReviewResponse> findHistory(Long itemId) {
-        if (claimItemRepository.findWithClaim(itemId).isEmpty()) {
-            throw new ResourceNotFoundException("claimItem", itemId);
+    public List<ReviewResponse> findHistory(Long itemId, User actor) {
+        ClaimItem item = claimItemRepository.findWithClaim(itemId)
+                .orElseThrow(() -> new ResourceNotFoundException("claimItem", itemId));
+        Claim claim = item.getClaim();
+        if (!claim.isReadableBy(actor)) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("claimItemId", itemId);
+            details.put("claimNo", claim.getClaimNo());
+            details.put("actorId", actor.getId());
+            throw new InvariantViolationException(ErrorCode.CLAIM_NOT_ASSIGNED, details);
         }
         return reviewRepository.findHistoryByItemId(itemId).stream()
                 .map(ReviewResponse::from)

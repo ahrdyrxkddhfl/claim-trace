@@ -79,6 +79,15 @@ class EvidenceInvariantTest extends InvariantTestSupport {
     }
 
     @Test
+    @DisplayName("심사관리자는 배정되지 않은 청구의 근거 목록도 조회할 수 있다")
+    void 심사관리자는_근거_목록을_조회할_수_있다() throws Exception {
+        // 복수인 확인을 승인하는 사람이 승인할 판정의 근거를 볼 수 있어야 한다.
+        findEvidences(ITEM_MANUAL_THERAPY, MANAGER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == " + EVIDENCE_THERAPY_AI + ")].contentInternal").exists());
+    }
+
+    @Test
     @DisplayName("행위자 헤더 없이 근거 목록을 조회할 수 없다")
     void 행위자_헤더_없이_근거_목록을_조회할_수_없다() throws Exception {
         mockMvc.perform(get("/claim-items/{itemId}/evidences", ITEM_MANUAL_THERAPY))

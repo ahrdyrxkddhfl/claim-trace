@@ -981,8 +981,8 @@ users  1─N reviews / interventions / rules(작성자)
 | GET | `/claims/{claimId}` | 청구 상세 (내부용 전체) | 9 | INV-6 |
 | GET | `/claims/{claimId}/documents` | 제출 서류 목록 및 OCR 결과 조회 | 9, 10 | INV-6 |
 | GET | `/claims/{claimId}/items` | 항목 목록 + AI 권고 + 기여도 | 9 | — |
-| GET | `/claim-items/{itemId}/reviews` | 항목 판정 이력 (재검토 포함, `is_current` 표시) | 9 | INV-12 |
-| GET | `/claim-items/{itemId}/evidences` | 근거 카드 목록 | 10 | — |
+| GET | `/claim-items/{itemId}/reviews` | 항목 판정 이력 (재검토 포함, `is_current` 표시) | 9 | INV-6, INV-12 |
+| GET | `/claim-items/{itemId}/evidences` | 근거 카드 목록 | 10 | INV-6 |
 | PUT | `/evidences/{evidenceId}/status` | 근거 채택·기각 | 10 | INV-7, INV-11 |
 | POST | `/claim-items/{itemId}/evidences` | 심사자 근거 수동 추가 | 10 | INV-7 |
 | POST | `/claim-items/{itemId}/reviews` | **항목 판정 저장** (권고와 다르면 개입 기록 동시 생성. 호출마다 이력 적재) | 9 | INV-1, INV-2, INV-3, INV-12 |
@@ -1122,6 +1122,7 @@ users  1─N reviews / interventions / rules(작성자)
 | 승인·반려 이력 | 처리가 개입 행을 제자리에서 덮어써, 반려 후 재승인하면 반려자와 반려 사유가 사라진다. 판정 이력을 남기는 D-6과 비대칭이고 보조수단성 ⑧의 "내용의 기록"을 충족하지 못한다 | `intervention_approvals` 추가. 개입 1건에 처리 N건이며 추가만 하고 수정·삭제하지 않는다 |
 | 승인과 판정의 관계 | 승인이 무엇을 확인한 것인지 정의되지 않았다. 대기 개입 중복을 막는 검사가 승인된 개입까지 "이미 있음"으로 보아, 승인 뒤 판정을 바꿔도 재승인 없이 확정된다 | 승인은 승인 당시의 판정을 확인한 것으로 본다. 같은 규칙의 개입이 모두 승인된 뒤 판정이 저장되면 새 승인 대기 개입을 만들고, 앞선 승인은 이력으로 남긴다 |
 | INV-7의 "확정" 범위 | `DECIDED`만 가리켜, 지급까지 끝난 `CLOSED` 청구의 근거를 고칠 수 있다 | `DECIDED` · `CLOSED` 모두 잠근다 |
+| 조회에 대한 INV-6 | INV-6은 "모든 조회·수정 API"를 규정했으나 API 표는 근거 목록·판정 이력 조회에 INV-6을 달지 않았다. 그대로 적용하면 복수인 확인을 승인할 심사관리자도 근거를 볼 수 없다 | 조회는 배정 심사자와 심사관리자에게 허용하고 수정은 배정 심사자만 한다. API 표의 두 조회에 INV-6을 달았다 |
 | 공개 수준과 고객용 문구 | `disclosure_level = CUSTOMER`인데 `content_customer`가 비면 설명서에서 오류 없이 빠진다 | 근거 생성 시와 상태 변경으로 공개 수준을 고객용으로 바꿀 때 거부한다 (`CUSTOMER_CONTENT_REQUIRED`) |
 | 판정과 지급액 | `reviews.decision`과 `paid_amount`의 관계가 없어, 청구금액을 넘는 지급액이나 금액이 있는 부지급이 그대로 확정 지급 총액에 더해진다 | 판정 저장 시 청구금액 초과, 금액이 있는 부지급, 0원인 지급·일부지급을 거부한다 (`PAID_AMOUNT_INCONSISTENT`) |
 

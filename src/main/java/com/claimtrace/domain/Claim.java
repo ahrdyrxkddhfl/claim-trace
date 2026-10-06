@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
 
 import com.claimtrace.domain.enums.ClaimStatus;
+import com.claimtrace.domain.enums.UserRole;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -226,5 +227,19 @@ public class Claim {
      */
     public boolean isAssignedTo(User user) {
         return this.assignee != null && user != null && this.assignee.getId().equals(user.getId());
+    }
+
+    /**
+     * 주어진 사용자가 이 청구의 심사 기록을 조회할 수 있는지 판별한다.
+     *
+     * <p>INV-6 을 조회에 적용한 것이다. 배정 심사자 외에 심사관리자도 허용한다.
+     * 심사관리자는 복수인 확인을 승인하는데, 승인할 판정의 근거와 이력을
+     * 볼 수 없으면 승인이 형식만 남는다. 수정은 여전히 배정 심사자만 할 수 있다.
+     *
+     * @param user 검사할 사용자
+     * @return 배정 심사자이거나 심사관리자이면 {@code true}
+     */
+    public boolean isReadableBy(User user) {
+        return isAssignedTo(user) || (user != null && user.getRole() == UserRole.REVIEW_MANAGER);
     }
 }

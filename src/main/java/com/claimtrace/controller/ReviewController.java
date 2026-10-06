@@ -101,13 +101,27 @@ public class ReviewController {
      * 정확히 1건이어야 하며, 이 응답으로 그것을 눈으로 확인할 수 있다.
      *
      * @param itemId 항목 식별자
+     * @param actorId 조회하는 사용자 식별자
      * @return 판정 시각 내림차순의 판정 목록>
      */
     @GetMapping("/{itemId}/reviews")
     @Operation(
             summary = "항목 판정 이력",
-            description = "재검토 이력을 포함한 전체 판정을 시간 역순으로 반환한다. isCurrent 가 참인 레코드는 정확히 1건이다 (INV-12).")
-    public ResponseEntity<List<ReviewResponse>> history(@PathVariable Long itemId) {
-        return ResponseEntity.ok(reviewService.findHistory(itemId));
+            description = """
+                    재검토 이력을 포함한 전체 판정을 시간 역순으로 반환한다. isCurrent 가 참인 레코드는 정확히 1건이다 (INV-12).
+
+                    검증: INV-6 배정 심사자 또는 심사관리자
+                    """)
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "403", description = "타 심사자 배정 건 (E-5)"),
+            @ApiResponse(responseCode = "404", description = "대상 항목 없음")
+    })
+    public ResponseEntity<List<ReviewResponse>> history(
+            @PathVariable Long itemId,
+            @RequestHeader("X-Actor-Id") Long actorId) {
+
+        User actor = actorResolver.resolve(actorId);
+        return ResponseEntity.ok(reviewService.findHistory(itemId, actor));
     }
 }

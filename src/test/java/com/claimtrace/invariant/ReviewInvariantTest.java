@@ -155,6 +155,13 @@ class ReviewInvariantTest extends InvariantTestSupport {
     }
 
     @Test
+    @DisplayName("심사관리자는 배정되지 않은 청구의 판정 이력도 조회할 수 있다")
+    void 심사관리자는_판정_이력을_조회할_수_있다() throws Exception {
+        findReviews(ITEM_CONSULT, MANAGER)
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @DisplayName("INV-6 배정되지 않은 심사자는 판정 이력을 조회할 수 없다")
     void 배정되지_않은_심사자는_판정_이력을_조회할_수_없다() throws Exception {
         findReviews(ITEM_CONSULT, OTHER_REVIEWER)

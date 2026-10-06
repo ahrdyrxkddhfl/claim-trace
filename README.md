@@ -161,12 +161,12 @@ INV-8과 INV-9는 예외 코드가 없다. 전자는 생성 자체를 막고, �
 엔드포인트에도 닿지 않은 것이라 기본 형식으로 두었다. 실패 테스트를 먼저 커밋하고
 고쳤다.
 
-### 테스트 86개
+### 테스트 91개
 
 ```
 DomainTransitionTest          26   엔티티 상태 전이와 생성 규칙 (Spring 없음)
-EvidenceInvariantTest         11   INV-6 · 7 · 11, D-3, 공개 수준과 문구
-ReviewInvariantTest           13   INV-1 · 2 · 3 · 6 · 7 · 12, D-6 · D-7, 지급액
+EvidenceInvariantTest         14   INV-6 · 7 · 11, D-3, 공개 수준과 문구
+ReviewInvariantTest           15   INV-1 · 2 · 3 · 6 · 7 · 12, D-6 · D-7, 지급액
 RuleEvaluatorTest             10   D-5 개입 규칙 평가 (Spring 없음)
 DecisionInvariantTest         11   INV-4 · 10, 직무 분리, 승인 기록과 처리 이력
 ExplanationInvariantTest       5   INV-5 · 6 · 8 · 9
@@ -259,6 +259,19 @@ INV-1은 모든 상태 전이에 행위자를 요구하고, 이 시스템의 전
 
 구현은 `DECIDED`와 `CLOSED`를 모두 잠근다. `OBJECTION`은 이의제기 재검토 중
 근거 수정을 허용하는지가 정의되지 않아 공백으로 남겼다.
+
+### INV-6이 조회에는 적용되지 않았다
+
+INV-6은 "모든 조회·수정 API에서 소유권 검사"라고 규정했지만, 같은 문서의 API 표는
+근거 목록과 판정 이력 조회에 INV-6을 달지 않았다. 구현은 API 표를 따라 두 조회에서
+행위자를 받지 않았고, 헤더 없이도, 배정되지 않은 심사자도 내부용 문구와 AI 기여도를
+그대로 받았다.
+
+그대로 INV-6을 적용하면 이번에는 복수인 확인을 승인하는 심사관리자가 막힌다. 승인할
+판정의 근거를 볼 수 없으면 승인은 형식만 남는다. 그래서 조회는 **배정 심사자와
+심사관리자**에게 허용하고 수정은 배정 심사자에게만 둔다. 기준은
+`Claim.isReadableBy` 한 곳에 두어 두 조회가 같은 규칙을 쓴다. 실패 테스트를 먼저
+커밋하고 고쳤다.
 
 ### 공개 수준과 고객용 문구의 관계가 없었다
 
@@ -452,7 +465,7 @@ Swagger UI에서 순서대로 실행하면 된다.
 ./gradlew test
 ```
 
-87개(불변조건 86 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
+92개(불변조건 91 + 기동 확인 1) 전부 통과한다. 보고서는 `build/reports/tests/test/index.html`.
 
 PostgreSQL 테스트는 Docker가 필요하다. Docker를 쓸 수 없으면 그 클래스만
 실패하고 나머지 검증에는 영향이 없다.
@@ -469,9 +482,9 @@ PostgreSQL 테스트는 Docker가 필요하다. Docker를 쓸 수 없으면 그 
 | 엔드포인트 | 검증하는 불변조건 |
 |---|---|
 | `POST /claim-items/{itemId}/reviews` | INV-1 · 2 · 3 · 6 · 7 · 12 |
-| `GET /claim-items/{itemId}/reviews` | — (판정 이력) |
+| `GET /claim-items/{itemId}/reviews` | INV-6 (배정 심사자 · 심사관리자) |
 | `POST /claim-items/{itemId}/evidences` | INV-6 · 7, 고객용 문구 존재 |
-| `GET /claim-items/{itemId}/evidences` | — (근거 카드 목록) |
+| `GET /claim-items/{itemId}/evidences` | INV-6 (배정 심사자 · 심사관리자) |
 | `PUT /evidences/{evidenceId}/status` | INV-6 · 7 · 11 |
 | `POST /claims/{claimId}/decision` | INV-4 · 6 · 10 |
 | `POST /claims/{claimId}/explanations/draft` | INV-5 · 6 · 9 |
@@ -535,7 +548,7 @@ src/main/java/com/claimtrace/
 ├── service/       6개 — 불변조건 검증이 전부 여기 있다
 └── support/       ActorResolver
 
-src/test/java/com/claimtrace/invariant/    테스트 86개
+src/test/java/com/claimtrace/invariant/    테스트 91개
 ```
 
 컨트롤러는 불변조건을 검사하지 않는다. 같은 규칙을 컨트롤러마다 되풀이하면
